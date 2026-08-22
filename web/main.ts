@@ -24,6 +24,7 @@ import { InputHandler } from "./input.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
 import { Minimap } from "./minimap.js";
+import { AudioEngine } from "./audio.js";
 
 // ── Lobby ──────────────────────────────────────────────────────────────────
 const lobby = new Lobby();
@@ -92,6 +93,62 @@ async function main() {
   effects.attach();
   minimap.start();
 
+  // ── Audio Engine ─────────────────────────────────────────────────────────
+  const audio = AudioEngine.getInstance();
+
+  // Init audio on first user interaction (browser autoplay policy)
+  const initAudio = () => {
+    audio.init();
+    document.removeEventListener("click", initAudio);
+    document.removeEventListener("keydown", initAudio);
+  };
+  document.addEventListener("click", initAudio);
+  document.addEventListener("keydown", initAudio);
+
+  // Mute toggle button
+  const muteBtn = document.createElement("button");
+  muteBtn.id = "audio-mute";
+  muteBtn.className = "hdr-btn";
+  muteBtn.textContent = "🔊";
+  muteBtn.title = "Toggle sound effects";
+  muteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const muted = audio.toggleMute();
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+  });
+  // Insert into header controls
+  const headerRight = document.querySelector(".header-right, .hdr-controls");
+  if (headerRight) {
+    headerRight.prepend(muteBtn);
+  } else {
+    document.querySelector("header")?.appendChild(muteBtn);
+  }
+
+  // Wire player join/leave sounds into network callbacks
+  const origCallbacks = network.callbacks;
+  const origOnJoin = origCallbacks.onPlayerJoin;
+  const origOnLeave = origCallbacks.onPlayerLeave;
+  network.callbacks.onPlayerJoin = (id) => {
+    origOnJoin?.(id);
+    audio.playJoin();
+  };
+  network.callbacks.onPlayerLeave = (id) => {
+    origOnLeave?.(id);
+    audio.playLeave();
+  };
+
+  // Track score changes for ding sound
+  let lastScore = 0;
+  const origOnPlayerState = origCallbacks.onPlayerState;
+  network.callbacks.onPlayerState = (s) => {
+    origOnPlayerState?.(s);
+    // Trigger ding on significant influence gain (refill)
+    if (s.influence > lastScore + 10) {
+      audio.playScoreDing();
+    }
+    lastScore = s.influence;
+  };
+
   // ── View mode toggle (2D ↔ 2.5D) ──────────────────────────────────────
   let viewMode: "2.5D" | "2D" = renderer instanceof IsometricRenderer ? "2.5D" : "2D";
 
@@ -147,6 +204,7 @@ async function main() {
     btn.addEventListener("click", () => {
       const p = parseInt(btn.dataset["power"] ?? "0", 10);
       effects.setActivePower(p);
+      audio.playPower(p as 0 | 1 | 2 | 3);
     });
   });
   window.addEventListener("keydown", (e) => {
@@ -165,6 +223,25 @@ async function main() {
     canvas.dataset["viewX"] = activeRenderer.viewX.toString();
     canvas.dataset["viewY"] = activeRenderer.viewY.toString();
   }, 50);
+
+  // Ambient sound update: scan material cache for fire/water ratios (~4Hz)
+  setInterval(() => {
+    const cache = activeRenderer.getMaterialCache();
+    if (!cache || cache.length === 0) return;
+
+    let fireCount = 0;
+    let waterCount = 0;
+    // Sample every 16th cell for performance
+    const step = 16;
+    const total = cache.length / step;
+    for (let i = 0; i < cache.length; i += step) {
+      const mat = cache[i];
+      if (mat === 6 || mat === 13) fireCount++;  // Fire or Ember
+      if (mat === 4) waterCount++;               // Water
+    }
+
+    audio.updateAmbient(fireCount / total, waterCount / total);
+  }, 250);
 }
 
 /** Transfer world state and camera from one renderer to another. */

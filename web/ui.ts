@@ -45,6 +45,26 @@ export class UIController {
   private rttInterval: ReturnType<typeof setInterval> | null = null;
   private cursors = new Map<number, { el: HTMLElement; timeout: ReturnType<typeof setTimeout> }>();
 
+  // ── Smooth number animation state ──────────────────────────────────────
+  private displayedTPS = 0;
+  private displayedP95 = 0;
+  private displayedCells = 0;
+  private displayedActive = 0;
+  private displayedChunks = 0;
+  private displayedNet = 0;
+  private targetTPS = 0;
+  private targetP95 = 0;
+  private targetCells = 0;
+  private targetActive = 0;
+  private targetChunks = 0;
+  private targetNet = 0;
+  private lerpAnimFrame: number | null = null;
+
+  // ── Influence warning state ────────────────────────────────────────────
+  private elInfluenceLowText: HTMLElement | null = null;
+  private elInfluenceTrack: HTMLElement | null = null;
+  private influenceLow = false;
+
   constructor(private readonly network: WorldNetwork) {}
 
   attach(): void {
@@ -65,6 +85,9 @@ export class UIController {
     elFtRtt    = q("ft-rtt");
     elCanvasWrapper = q("canvas-wrapper");
 
+    this.elInfluenceLowText = document.getElementById("influence-low-text");
+    this.elInfluenceTrack = document.getElementById("influence-track");
+
     this.network.callbacks = {
       onConnected:    () => this.onConnected(),
       onDisconnected: () => this.onDisconnected(),
@@ -82,6 +105,9 @@ export class UIController {
     this.rttInterval = setInterval(() => {
       elFtRtt.textContent = this.network.lastRttMs.toFixed(0);
     }, 1000);
+
+    // Start smooth number animation loop
+    this.startLerpLoop();
   }
 
   private onConnected(): void {
@@ -97,12 +123,14 @@ export class UIController {
   }
 
   private onMetrics(m: MetricsData): void {
-    elFtTPS.textContent    = m.tps.toFixed(1);
-    elFtP95.textContent    = m.tickP95Ms.toFixed(1);
-    elFtCells.textContent  = formatNum(m.activeCells);
-    elFtActive.textContent = formatNum(m.activeCells);
-    elFtChunks.textContent = m.activeChunks.toString();
-    elFtNet.textContent    = (m.outboundBPS / 1024).toFixed(1);
+    // Set lerp targets — DOM is updated in the animation frame
+    this.targetTPS    = m.tps;
+    this.targetP95    = m.tickP95Ms;
+    this.targetCells  = m.activeCells;
+    this.targetActive = m.activeCells;
+    this.targetChunks = m.activeChunks;
+    this.targetNet    = m.outboundBPS / 1024;
+
     elPlayers.textContent  = m.playerCount.toString();
 
     const pct = Math.round(m.stability * 100);
@@ -117,6 +145,44 @@ export class UIController {
     const pct = Math.min(100, (s.influence / s.maxInfluence) * 100);
     elInfluenceFill.style.width  = `${pct}%`;
     elInfluenceValue.textContent = s.influence.toFixed(0);
+
+    // Influence warning at < 20%
+    const isLow = pct < 20;
+    if (isLow !== this.influenceLow) {
+      this.influenceLow = isLow;
+      if (isLow) {
+        this.elInfluenceTrack?.classList.add("low-influence");
+        elInfluenceFill.classList.add("low-gradient");
+        this.elInfluenceLowText?.classList.add("visible");
+      } else {
+        this.elInfluenceTrack?.classList.remove("low-influence");
+        elInfluenceFill.classList.remove("low-gradient");
+        this.elInfluenceLowText?.classList.remove("visible");
+      }
+    }
+  }
+
+  // ── Smooth Number Animation Loop ──────────────────────────────────────
+  private startLerpLoop(): void {
+    const LERP_FACTOR = 0.1;
+    const tick = () => {
+      this.displayedTPS    += (this.targetTPS - this.displayedTPS) * LERP_FACTOR;
+      this.displayedP95    += (this.targetP95 - this.displayedP95) * LERP_FACTOR;
+      this.displayedCells  += (this.targetCells - this.displayedCells) * LERP_FACTOR;
+      this.displayedActive += (this.targetActive - this.displayedActive) * LERP_FACTOR;
+      this.displayedChunks += (this.targetChunks - this.displayedChunks) * LERP_FACTOR;
+      this.displayedNet    += (this.targetNet - this.displayedNet) * LERP_FACTOR;
+
+      elFtTPS.textContent    = this.displayedTPS.toFixed(1);
+      elFtP95.textContent    = this.displayedP95.toFixed(1);
+      elFtCells.textContent  = formatNum(Math.round(this.displayedCells));
+      elFtActive.textContent = formatNum(Math.round(this.displayedActive));
+      elFtChunks.textContent = Math.round(this.displayedChunks).toString();
+      elFtNet.textContent    = this.displayedNet.toFixed(1);
+
+      this.lerpAnimFrame = requestAnimationFrame(tick);
+    };
+    this.lerpAnimFrame = requestAnimationFrame(tick);
   }
 
   private showStatus(title: string, body: string): void {

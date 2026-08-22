@@ -1,0 +1,24 @@
+# NOTE: Rust toolchain (rustc + cargo) required to build.
+# Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Then: cargo build
+# For mobile targets: cargo install tauri-cli && cargo tauri android init / cargo tauri ios init
+
+[package]
+name = "worldweaver"
+version = "0.1.0"
+edition = "2021"
+description = "WorldWeaver — One World. Many Forces. Native desktop/mobile shell via Tauri 2."
+authors = ["WorldWeaver Team"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -19,6 +19,10 @@ web/dist/
 *.swp
 .DS_Store
 
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
 # Environment
 .env
 .env.local

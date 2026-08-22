@@ -15,6 +15,7 @@
 
 import { WorldNetwork, IGameRenderer } from "./network.js";
 import { ClientPrediction } from "./prediction.js";
+import { AudioEngine } from "./audio.js";
 
 const POWER_KEYS: Record<string, number> = {
   "1": 0, "2": 1, "3": 2, "4": 3,
@@ -24,6 +25,9 @@ const POWER_KEYS: Record<string, number> = {
 const CAM_MAX_SPEED   = 16;   // cells/frame
 const CAM_ACCEL       = 2;    // cells/frame²
 const CAM_FRICTION    = 0.85; // velocity multiplier per frame when no input
+
+// ── Screen Shake constants ───────────────────────────────────────────────────
+const SHAKE_RADIUS_THRESHOLD = 20; // trigger shake when radius > this
 
 export class InputHandler {
   private applying = false;
@@ -44,12 +48,21 @@ export class InputHandler {
   private zoomIndicator: HTMLElement | null = null;
   private zoomHideTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // ── Screen shake ────────────────────────────────────────────────────────
+  private canvasWrapper: HTMLElement | null = null;
+  private shaking = false;
+
+  // ── Shortcuts overlay ───────────────────────────────────────────────────
+  private shortcutsOverlay: HTMLElement | null = null;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly network: WorldNetwork,
     private renderer: IGameRenderer,
   ) {
     this.zoomIndicator = document.getElementById("zoom-indicator");
+    this.canvasWrapper = document.getElementById("canvas-wrapper");
+    this.shortcutsOverlay = document.getElementById("shortcuts-overlay");
   }
 
   /** Hot-swap the renderer backend (used by view mode toggle). */
@@ -82,7 +95,17 @@ export class InputHandler {
         const p = parseInt(btn.dataset["power"] ?? "0", 10);
         this.network.activePower = p;
         this.updatePowerButtons(p);
+        this.bouncePowerButton(btn);
       });
+    });
+
+    // Shortcuts overlay toggle
+    const shortcutsBtn = document.getElementById("shortcuts-btn");
+    if (shortcutsBtn) {
+      shortcutsBtn.addEventListener("click", () => this.toggleShortcuts());
+    }
+    this.shortcutsOverlay?.addEventListener("click", (e) => {
+      if (e.target === this.shortcutsOverlay) this.toggleShortcuts();
     });
 
     // Start camera animation loop
@@ -105,8 +128,15 @@ export class InputHandler {
     this.lastPowerX = wx;
     this.lastPowerY = wy;
     // Client-side prediction: apply visual immediately before server round-trip
-    this.prediction?.predict(this.network.activePower, wx, wy, 24);
+    const radius = 24; // default server radius
+    this.prediction?.predict(this.network.activePower, wx, wy, radius);
     this.network.sendPower(this.network.activePower, wx, wy);
+    // Procedural sound effect for power application
+    AudioEngine.getInstance().playPower(this.network.activePower as 0 | 1 | 2 | 3);
+    // Screen shake for large applications
+    if (radius > SHAKE_RADIUS_THRESHOLD) {
+      this.triggerShake();
+    }
   }
 
   private onMouseDown(e: MouseEvent): void {
@@ -169,11 +199,29 @@ export class InputHandler {
 
   // ── Keyboard ─────────────────────────────────────────────────────────────
   private onKeyDown(e: KeyboardEvent): void {
+    // Shortcuts overlay toggle
+    if (e.key === "?") {
+      this.toggleShortcuts();
+      return;
+    }
+
+    // Minimap toggle
+    if (e.key === "m" || e.key === "M") {
+      const minimap = document.getElementById("minimap");
+      if (minimap) {
+        minimap.style.display = minimap.style.display === "none" ? "" : "none";
+      }
+      return;
+    }
+
     // Power selection
     if (e.key in POWER_KEYS) {
       const p = POWER_KEYS[e.key];
       this.network.activePower = p;
       this.updatePowerButtons(p);
+      // Bounce the selected button
+      const btn = document.querySelector<HTMLButtonElement>(`.power-btn[data-power="${p}"]`);
+      if (btn) this.bouncePowerButton(btn);
       return;
     }
 
@@ -259,5 +307,33 @@ export class InputHandler {
       const p = parseInt(btn.dataset["power"] ?? "0", 10);
       btn.classList.toggle("active", p === active);
     });
+  }
+
+  // ── Screen Shake ─────────────────────────────────────────────────────────
+  triggerShake(): void {
+    if (this.shaking || !this.canvasWrapper) return;
+    this.shaking = true;
+    this.canvasWrapper.classList.add("shake");
+    this.canvasWrapper.addEventListener("animationend", () => {
+      this.canvasWrapper!.classList.remove("shake");
+      this.shaking = false;
+    }, { once: true });
+  }
+
+  // ── Power Button Bounce ──────────────────────────────────────────────────
+  private bouncePowerButton(btn: HTMLButtonElement): void {
+    btn.classList.remove("bounce", "pulse-border");
+    // Force reflow to restart animation
+    void btn.offsetWidth;
+    btn.classList.add("bounce", "pulse-border");
+    btn.addEventListener("animationend", () => {
+      btn.classList.remove("bounce", "pulse-border");
+    }, { once: true });
+  }
+
+  // ── Shortcuts Overlay ────────────────────────────────────────────────────
+  private toggleShortcuts(): void {
+    if (!this.shortcutsOverlay) return;
+    this.shortcutsOverlay.classList.toggle("visible");
   }
 }

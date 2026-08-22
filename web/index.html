@@ -732,6 +732,137 @@
       font-size: 11px;
       margin: 0 2px;
     }
+
+    /* ── Game Feel: Screen Shake ─────────────────────────── */
+    @keyframes shake {
+      0%   { transform: translate(2px, -1px); }
+      25%  { transform: translate(-3px, 2px); }
+      50%  { transform: translate(1px, -2px); }
+      75%  { transform: translate(-2px, 1px); }
+      100% { transform: translate(0, 0); }
+    }
+    #canvas-wrapper.shake {
+      animation: shake 0.15s ease-out;
+    }
+
+    /* ── Game Feel: Power Selection Bounce ────────────────── */
+    @keyframes power-bounce {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .power-btn.bounce {
+      animation: power-bounce 0.2s ease-out;
+    }
+    @keyframes border-pulse {
+      0%   { box-shadow: 0 0 0 0 var(--accent-glow); }
+      50%  { box-shadow: 0 0 0 4px var(--accent-glow); }
+      100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    }
+    .power-btn.pulse-border {
+      animation: border-pulse 0.3s ease-out;
+    }
+
+    /* ── Game Feel: Influence Warning ────────────────────── */
+    @keyframes influence-warn-glow {
+      0%, 100% { box-shadow: 0 0 4px rgba(196, 69, 54, 0.3); }
+      50%      { box-shadow: 0 0 12px rgba(196, 69, 54, 0.6); }
+    }
+    #influence-track.low-influence {
+      animation: influence-warn-glow 1.2s ease-in-out infinite;
+    }
+    #influence-track.low-influence #influence-fill,
+    #influence-fill.low-gradient {
+      background: linear-gradient(90deg, #C44536 0%, #D4881A 100%) !important;
+    }
+    #influence-low-text {
+      font-size: 10px;
+      color: var(--danger);
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+    }
+    #influence-low-text.visible {
+      opacity: 1;
+    }
+
+    /* ── Game Feel: Shortcuts Overlay ────────────────────── */
+    #shortcuts-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    #shortcuts-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #FFF8EB;
+    }
+    #shortcuts-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(44, 24, 16, 0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #shortcuts-overlay.visible {
+      display: flex;
+    }
+    .shortcuts-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 32px;
+      box-shadow: 0 12px 40px rgba(44, 24, 16, 0.15);
+      min-width: 280px;
+    }
+    .shortcuts-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .shortcut-row:last-child {
+      border-bottom: none;
+    }
+    .shortcut-row kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 32px;
+      text-align: center;
+    }
+    .shortcut-row span {
+      font-size: 12px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -787,6 +918,7 @@
       <span>Players: <b id="hdr-players">–</b></span>
       <span><b id="hdr-nickname"></b></span>
       <span id="connection-badge">⚪ Connecting…</span>
+      <button id="shortcuts-btn" title="Keyboard shortcuts (?)">?</button>
     </div>
   </div>
 
@@ -803,6 +935,7 @@
       <span>Influence</span>
       <div id="influence-track"><div id="influence-fill"></div></div>
       <span id="influence-value">100</span>
+      <span id="influence-low-text">Low influence — regenerating…</span>
     </div>
   </div>
 
@@ -831,6 +964,19 @@
   </div>
 
   </div><!-- /game-container -->
+
+  <!-- Keyboard Shortcuts Overlay -->
+  <div id="shortcuts-overlay">
+    <div class="shortcuts-card">
+      <h3>Keyboard Shortcuts</h3>
+      <div class="shortcut-row"><kbd>WASD</kbd> <span>Pan camera</span></div>
+      <div class="shortcut-row"><kbd>1–5</kbd> <span>Select power</span></div>
+      <div class="shortcut-row"><kbd>Scroll</kbd> <span>Zoom</span></div>
+      <div class="shortcut-row"><kbd>M</kbd> <span>Toggle minimap</span></div>
+      <div class="shortcut-row"><kbd>V</kbd> <span>Toggle 2D / 2.5D view</span></div>
+      <div class="shortcut-row"><kbd>?</kbd> <span>This help</span></div>
+    </div>
+  </div>
 
   <script type="module" src="main.ts"></script>
 </body>

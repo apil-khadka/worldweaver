@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for WorldWeaver",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open"
+  ]
+}
