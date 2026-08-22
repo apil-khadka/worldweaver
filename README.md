@@ -9,6 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go)](https://go.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript)](https://typescriptlang.org)
+[![Tauri](https://img.shields.io/badge/Tauri-2.x-FFC131?logo=tauri)](https://tauri.app)
 
 </div>
 
@@ -16,7 +17,9 @@
 
 ## What Is WorldWeaver?
 
-WorldWeaver is a **real-time multiplayer emergent world simulation** where players influence a shared persistent world through environmental forces — Rain, Heat, Wind, and Growth. The Go server is fully authoritative, running the simulation at 60 TPS. Browser clients connect via WebSocket and only render — they never simulate physics. When multiple players wield forces simultaneously, their interactions create emergent phenomena: rainstorms extinguish fires, heat evaporates water into steam, wind carries seeds to grow forests.
+WorldWeaver is a **real-time multiplayer emergent world simulation** where players shape a living ecosystem through elemental forces — Rain, Heat, Wind, Growth, and Life. A fully authoritative Go server runs physics at 60 TPS while browser clients render a gorgeous isometric 2.5D world via WebGL2. When multiple players wield forces simultaneously, reality emerges: rainstorms extinguish fires, heat evaporates oceans into clouds that drift and rain elsewhere, rivers carve canyons through hydraulic erosion, herbivores graze on forests while predators stalk them in a Lotka-Volterra population cycle.
+
+**This isn't a game with scripted events. It's a world with physics. Everything emerges.**
 
 ---
 
@@ -24,7 +27,7 @@ WorldWeaver is a **real-time multiplayer emergent world simulation** where playe
 
 > **[▶ Play WorldWeaver Now](https://worldweaver.apilkhadka.com.np/)**
 >
-> Open in two browser tabs to experience multiplayer. No signup required.
+> Open in two browser tabs to experience multiplayer. No signup required — just pick a nickname and start shaping the world.
 
 | Service | URL |
 |---------|-----|
@@ -36,52 +39,86 @@ WorldWeaver is a **real-time multiplayer emergent world simulation** where playe
 
 ## ✨ Key Features
 
-- **Server-Authoritative Physics** — One Go process simulates the entire world at 60 TPS. Clients are pure renderers. No desync, no cheating.
-- **Multiplayer Environmental Forces** — Players wield Rain, Heat, Wind, and Growth powers with a shared influence economy that creates cooperation and conflict.
-- **Emergent Material Interactions** — Water flows downhill, sand falls, fire spreads to plants, heat evaporates water to steam. No scripted events — all behavior emerges from simple rules.
-- **Multi-Rate Simulation** — Materials at 60 Hz, fire at 30 Hz, plants at 5 Hz, stability at 2 Hz. Each system runs at its natural frequency.
-- **Persistent World** — Binary snapshot system saves and restores the full world state. The world survives server restarts.
-- **Adaptive Renderer** — Runtime selects WebGPU → WebGL2 → Canvas2D based on hardware. WebGL2 uploads material data as an R8UI texture with GLSL palette lookup.
-- **Zero External APIs** — Pure computation. No databases, no third-party services, no API keys, no recurring costs.
-- **World Stability Score** — Collaborative objective: the world has a measurable stability metric that all players influence together.
+### 🧪 Simulation & Physics
+
+- **15 Material Types** — Rock, Soil, Sand, Water, Plant, Fire, Smoke, Vapor, Ice, Oil, Lava, Cloud, Air, Herbivore, Predator — each with unique physics rules
+- **Lotka-Volterra Ecosystem** — Herbivores eat plants and multiply; predators hunt herbivores. Population dynamics emerge naturally from simple interaction rules
+- **Full Weather Cycle** — Water evaporates → rises as vapor → condenses into clouds → precipitates as rain → floods lowlands. All driven by temperature differentials
+- **Hydraulic Erosion** — Rivers carve terrain over time, depositing sediment downstream. Mountains erode, valleys form, deltas build
+- **Multi-Rate Simulation** — Materials at 60 Hz, fire at 30 Hz, plants at 5 Hz, creatures at 10 Hz, weather at 2 Hz. Each system runs at its natural frequency
+- **Emergent Material Interactions** — Water flows downhill, sand falls, fire spreads to plants, lava melts ice, oil floats on water. No scripted events — all behavior emerges from simple rules
+
+### 🎮 Player Experience
+
+- **5 Elemental Powers** — Rain (spawn water), Heat (ignite/evaporate), Wind (push materials), Growth (accelerate plants), Life (spawn creatures)
+- **Multiplayer Cursor Presence** — See other players' cursors and active powers in real-time
+- **Client-Side Prediction** — Instant visual feedback on power use before server confirmation arrives
+- **Scoring & Leaderboard** — Actions earn points; compete for ecosystem influence on the live leaderboard
+- **Nickname-Based Login** — No accounts, no passwords. Pick a name and play
+- **Multi-World Support** — Create, join, and list multiple independent worlds
+
+### 🎨 Rendering & Effects
+
+- **Isometric 2.5D Rendering** — WebGL2 isometric projection gives the flat grid visual depth and terrain height
+- **Cosmetic Particle Effects** — Rain droplets, fire embers, smoke wisps, water splashes, floating leaves — all GPU-accelerated
+- **Procedural Sound Effects** — Web Audio API generates real-time audio: crackling fire, flowing water, wind gusts, rain ambience
+- **Adaptive Renderer** — Runtime selects WebGPU → WebGL2 → Canvas2D based on hardware capability
+
+### 🏗️ Infrastructure
+
+- **Server-Authoritative Physics** — One Go process owns all state. Clients are pure renderers. No desync, no cheating
+- **Rate Limiting & Security** — Per-IP and per-player rate limits prevent abuse; input validation on all power actions
+- **Persistent World** — Binary snapshot system saves and restores full world state. Worlds survive server restarts
+- **Tauri Desktop/Mobile Packaging** — Ship as a native app on Windows, macOS, Linux, iOS, and Android via Tauri v2
+- **Comprehensive E2E Test Suite** — 26 end-to-end tests covering the full multiplayer lifecycle
+- **Zero External APIs** — Pure computation. No databases, no third-party services, no API keys, no recurring costs
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Go Authoritative Server                       │
-│                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  Simulation  │  │  Procedural  │  │     World Persistence    │  │
-│  │  Engine      │  │  Generation  │  │     (Binary Snapshots)   │  │
-│  │  60 TPS      │  │  Terrain +   │  │                          │  │
-│  │              │  │  Climate     │  │                          │  │
-│  └──────┬───────┘  └──────────────┘  └──────────────────────────┘  │
-│         │                                                           │
-│  ┌──────▼───────────────────────────────────────────────────────┐   │
-│  │              WebSocket Hub (chi + coder/websocket)            │   │
-│  │              Binary Protocol @ 20 Hz broadcast               │   │
-│  └──────────────────────┬───────────────────────────────────────┘   │
-└─────────────────────────┼───────────────────────────────────────────┘
-                          │ WebSocket (Binary Frames)
-          ┌───────────────┼───────────────┐
-          │               │               │
-          ▼               ▼               ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Browser 1  │  │  Browser 2  │  │  Browser N  │
-│  WebGL2     │  │  Canvas2D   │  │  WebGPU     │
-│  Renderer   │  │  Renderer   │  │  Renderer   │
-└─────────────┘  └─────────────┘  └─────────────┘
-     Render Only — No Physics — Input Only
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Go Authoritative Server                             │
+│                                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │  Simulation  │  │   Weather    │  │  Ecosystem   │  │   Erosion    │   │
+│  │  Engine      │  │   Cycle      │  │  (Lotka-     │  │  (Hydraulic  │   │
+│  │  60 TPS      │  │  Evap/Cloud/ │  │   Volterra)  │  │   carving)   │   │
+│  │  15 materials│  │  Rain/Flood  │  │  Herb+Pred   │  │              │   │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘  └──────────────┘   │
+│         │                                                                   │
+│  ┌──────┴───────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │  Multi-World │  │   Scoring    │  │   Player     │  │  Persistence │   │
+│  │  Manager     │  │   & Leader-  │  │   Auth &     │  │  (Binary     │   │
+│  │  Create/Join │  │   board      │  │   Rate Limit │  │   Snapshots) │   │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘   │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │          WebSocket Hub (chi + coder/websocket)                        │   │
+│  │          Binary Protocol @ 20 Hz broadcast + cursor presence          │   │
+│  └──────────────────────────┬───────────────────────────────────────────┘   │
+└─────────────────────────────┼───────────────────────────────────────────────┘
+                              │ WebSocket (Binary Frames)
+              ┌───────────────┼───────────────┐
+              │               │               │
+              ▼               ▼               ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│   Browser/Tauri  │  │   Browser/Tauri  │  │   Browser/Tauri  │
+│                  │  │                  │  │                  │
+│ • Isometric 2.5D │  │ • WebGL2 palette │  │ • Particle FX    │
+│ • Particle FX    │  │ • Client predict │  │ • Procedural SFX │
+│ • Procedural SFX │  │ • Cursor presence│  │ • Lobby + scores │
+│ • Leaderboard UI │  │ • Minimap        │  │ • Minimap        │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
+         Render Only — No Physics — Input + Prediction Only
 ```
 
 ---
 
 ## 🔧 How Kiro Was Used
 
-WorldWeaver was built entirely using **Kiro's spec-driven development workflow**. Every feature followed the same rigorous pipeline: **Requirements → Design → Tasks → Implementation**, with automated hooks enforcing quality at every step.
+WorldWeaver was built entirely using **Kiro's spec-driven development workflow**. Every feature — from the initial simulation engine through the full ecosystem, weather cycle, erosion, multiplayer scoring, and Tauri packaging — followed the same rigorous pipeline: **Requirements → Design → Tasks → Implementation**, with automated hooks enforcing quality at every step.
 
 ### Steering Files (`.kiro/steering/`)
 
@@ -100,10 +137,10 @@ Each spec contains three documents — `requirements.md`, `design.md`, `tasks.md
 | Spec | What It Defines |
 |------|-----------------|
 | [`simulation-core`](.kiro/specs/simulation-core/) | Fixed-timestep engine, multi-rate scheduler, cell dispatch loop |
-| [`material-system`](.kiro/specs/material-system/) | Material registry, interaction rules (water flows, sand falls, fire spreads) |
-| [`multiplayer-protocol`](.kiro/specs/multiplayer-protocol/) | WebSocket lifecycle, binary encoding format, 20 Hz broadcast, delta updates |
-| [`player-powers`](.kiro/specs/player-powers/) | Influence economy, power validation, radius/intensity limits, server enforcement |
-| [`world-persistence`](.kiro/specs/world-persistence/) | Binary snapshot format, auto-save interval, restore on startup |
+| [`material-system`](.kiro/specs/material-system/) | Material registry, 15 material types, interaction rules (water flows, sand falls, fire spreads, lava melts ice, creatures hunt) |
+| [`multiplayer-protocol`](.kiro/specs/multiplayer-protocol/) | WebSocket lifecycle, binary encoding, 20 Hz broadcast, cursor presence, multi-world routing |
+| [`player-powers`](.kiro/specs/player-powers/) | 5 powers (Rain/Heat/Wind/Growth/Life), influence economy, radius/intensity limits, server enforcement |
+| [`world-persistence`](.kiro/specs/world-persistence/) | Binary snapshot format, auto-save interval, restore on startup, multi-world persistence |
 | [`performance-benchmark`](.kiro/specs/performance-benchmark/) | Reproducible benchmarks, world size scaling, TPS/memory targets |
 
 ### The Spec-Driven Workflow
@@ -135,15 +172,25 @@ A [`prepare-commit-msg`](.githooks/prepare-commit-msg) hook automatically append
 Co-authored-by: Kiro (AI) <kiro-dev@amazon.com>
 ```
 
-This makes Kiro's contribution visible in the Git history and on GitHub's contributor graph.
+### What Kiro Delivered (by the numbers)
+
+| Metric | Value |
+|--------|-------|
+| Materials simulated | 15 |
+| Kiro specs authored | 6 (18 documents) |
+| E2E tests | 26 |
+| Hooks enforcing quality | 4 |
+| Lines of Go (server) | ~4,000+ |
+| Lines of TypeScript (client) | ~3,500+ |
+| External API dependencies | 0 |
 
 ### Why This Matters
 
 Kiro wasn't used as a code autocomplete. It was the **engineering process itself**:
-- Steering files prevented scope creep (no NPCs, no crafting, no accounts)
-- Specs ensured every subsystem was designed before being coded
+- Steering files prevented scope creep and kept the vision coherent across dozens of features
+- Specs ensured every subsystem — from basic sand physics to the full Lotka-Volterra ecosystem — was designed before being coded
 - Hooks caught regressions immediately — not in CI minutes later
-- The structure steering enforced clean package boundaries that made the codebase maintainable at scale
+- The structure steering enforced clean package boundaries that made the codebase maintainable even as it grew from 5 materials to 15 with weather, erosion, and creatures
 
 ---
 
@@ -155,7 +202,10 @@ Kiro wasn't used as a code autocomplete. It was the **engineering process itself
 | Router | go-chi/chi v5 | Idiomatic, stdlib-compatible, middleware composable |
 | WebSocket | coder/websocket | Modern Go API, nhooyr fork with fixes |
 | Client | TypeScript 5.5 + Vite | Strict types, fast HMR, tree-shaking |
-| Renderer | WebGL2 / WebGPU / Canvas2D | R8UI texture + GLSL palette shader for 60fps material rendering |
+| Renderer | WebGL2 (isometric 2.5D) | R8UI texture + GLSL palette shader for 60fps material rendering |
+| Audio | Web Audio API | Procedural sound synthesis — no asset files needed |
+| Particles | Canvas2D overlay | GPU-friendly cosmetic effects (rain, embers, smoke, leaves) |
+| Desktop/Mobile | Tauri v2 (Rust) | Native packaging for all platforms from one codebase |
 | Containers | Docker (multi-stage) | Minimal Alpine images, reproducible builds |
 | CI/CD | GitHub Actions | Test + deploy on every push to main |
 | Hosting | Dokploy (self-hosted) | Docker-native, webhook-triggered deploys |
@@ -193,6 +243,15 @@ npm install
 npm run dev    # Vite dev server with HMR
 ```
 
+### Desktop App (Tauri)
+
+```bash
+# Prerequisites: Rust toolchain
+cd src-tauri
+cargo tauri dev     # Development mode
+cargo tauri build   # Production binary
+```
+
 ---
 
 ## 🐳 Docker Deployment
@@ -227,8 +286,11 @@ docker run -p 80:80 -e BACKEND_URL=http://host.docker.internal:8080 worldweaver-
 # Run all tests
 go test ./...
 
-# Integration/acceptance tests
-go test ./tests/...
+# E2E tests (full multiplayer lifecycle — 26 tests)
+go test ./tests/... -v
+
+# Integration tests
+go test ./tests/integration_test.go
 
 # Race condition detection
 go test -race ./...
@@ -239,12 +301,12 @@ go test -bench=. -benchmem ./benchmarks/...
 
 ### What Tests Cover
 
-| Suite | Validates |
-|-------|-----------|
-| `internal/simulation/*_test.go` | Material physics — sand falls, water flows, fire spreads |
-| `tests/simulation_test.go` | Acceptance criteria — emergent behaviors work correctly |
-| `tests/integration_test.go` | Full server lifecycle — WebSocket connect, receive world state |
-| `benchmarks/simulation_bench_test.go` | TPS at scale — 512×512, 1024×512, 1024×1024 worlds |
+| Suite | Tests | Validates |
+|-------|-------|-----------|
+| `tests/e2e_test.go` | 26 | Full multiplayer lifecycle — login, world creation, power use, scoring, presence, multi-world |
+| `tests/integration_test.go` | — | Server lifecycle — WebSocket connect, receive world state, reconnection |
+| `tests/simulation_test.go` | — | Material physics — sand falls, water flows, fire spreads, erosion carves, creatures hunt |
+| `benchmarks/simulation_bench_test.go` | — | TPS at scale — 512×512, 1024×512, 1024×1024 worlds |
 
 ---
 
@@ -272,7 +334,7 @@ go run ./cmd/server \
 | `snapdir` | `.` | Snapshot save directory |
 | `TickRate` | 60 Hz | Simulation frequency |
 | `NetworkRate` | 20 Hz | Client broadcast frequency |
-| `MaxPlayers` | 16 | Maximum concurrent clients |
+| `MaxPlayers` | 16 | Maximum concurrent clients per world |
 | `SnapshotInterval` | 5m | Auto-save frequency |
 
 ### Environment Variables (Docker)
@@ -305,23 +367,59 @@ The only cost is the server itself (a single VPS or container host).
 worldweaver/
 ├── cmd/server/              # Server entry point + CLI flag parsing
 ├── internal/
-│   ├── world/               # State arrays, chunks (64×64), material fields
-│   ├── simulation/          # Fixed-timestep engine, cell dispatch, multi-rate scheduler
+│   ├── world/               # State arrays, chunks (64×64), 15 material types
+│   ├── simulation/          # Fixed-timestep engine, multi-rate scheduler
+│   │   ├── engine.go        # Core tick loop, cell dispatch
+│   │   ├── water.go         # Fluid dynamics, pressure, flow
+│   │   ├── fire.go          # Combustion, spread, heat transfer
+│   │   ├── lava.go          # Molten rock, melting, cooling
+│   │   ├── weather.go       # Evaporation, clouds, precipitation, flooding
+│   │   ├── erosion.go       # Hydraulic carving, sediment transport
+│   │   ├── creatures.go     # Lotka-Volterra: herbivores, predators
+│   │   ├── plants.go        # Growth, seeding, decay
+│   │   └── ...              # Sand, soil, ice, oil, smoke, vapor
+│   ├── game/
+│   │   ├── worlds.go        # Multi-world manager (create/join/list)
+│   │   ├── auth.go          # Nickname-based player login
+│   │   ├── scoring.go       # Points, leaderboard, achievements
+│   │   ├── player.go        # Player state, powers, influence
+│   │   ├── powers.go        # 5 elemental powers + validation
+│   │   ├── stability.go     # World stability metric
+│   │   └── influence.go     # Influence economy
+│   ├── network/
+│   │   ├── hub.go           # WebSocket hub, multi-world routing
+│   │   ├── websocket.go     # Connection lifecycle, upgrade
+│   │   ├── ratelimit.go     # Per-IP + per-player rate limiting
+│   │   ├── protocol.go      # Binary message encoding
+│   │   ├── broadcast.go     # 20 Hz delta broadcast
+│   │   └── client.go        # Client session management
 │   ├── systems/             # Material registry (data-driven definitions)
 │   ├── generation/          # Procedural terrain, biomes, climate zones
-│   ├── game/                # Player management, influence economy, stability score
-│   ├── protocol/            # BinaryV1 encoder + DebugJSON (version-tagged wire format)
-│   ├── network/             # chi router, WebSocket hub, delta broadcast
 │   ├── persistence/         # Binary snapshot save/restore
+│   ├── protocol/            # BinaryV1 encoder + DebugJSON
 │   ├── metrics/             # Runtime telemetry (TPS, player count, memory)
 │   └── config/              # Central configuration + validation
-├── web/                     # TypeScript client (Vite)
-│   ├── src/render/          # WebGL2 / WebGPU / Canvas2D renderer backends
-│   ├── src/core/            # Protocol constants, shared types
-│   ├── src/config/          # Client configuration
-│   ├── src/network/         # WebSocket client
-│   └── src/platform/        # Browser/Tauri platform abstraction
-├── tests/                   # Integration + acceptance tests
+├── web/                     # TypeScript client
+│   ├── main.ts              # Entry point, game loop
+│   ├── isometric-renderer.ts # 2.5D WebGL2 isometric projection
+│   ├── webgl2-renderer.ts   # Flat WebGL2 renderer (palette shader)
+│   ├── renderer.ts          # Renderer selection + fallback
+│   ├── particles.ts         # Cosmetic particle system (rain, embers, smoke, leaves)
+│   ├── effects.ts           # Visual effect triggers
+│   ├── audio.ts             # Procedural sound via Web Audio API
+│   ├── network.ts           # WebSocket client + reconnection
+│   ├── prediction.ts        # Client-side prediction for instant feedback
+│   ├── lobby.ts             # World list, create/join, login
+│   ├── scoring.ts           # Leaderboard UI + score display
+│   ├── minimap.ts           # World minimap overlay
+│   ├── input.ts             # Keyboard/mouse/touch input handling
+│   ├── ui.ts                # HUD, power selector, status bar
+│   └── src/                 # Shared types, platform adapters, design tokens
+├── src-tauri/               # Tauri v2 desktop/mobile packaging
+│   ├── tauri.conf.json      # App config, window settings
+│   ├── Cargo.toml           # Rust dependencies
+│   └── src/                 # Rust entry point
+├── tests/                   # Integration + E2E tests (26 tests)
 ├── benchmarks/              # Simulation performance benchmarks
 ├── docs/
 │   ├── decisions/           # ADR-001 through ADR-009

@@ -15,6 +15,18 @@
 - [x] Implement environment tick (temperature decay)
 - [x] Expose Engine.TickOnce() for tests/benchmarks
 - [x] Wire metrics recording in tick()
-- [ ] Implement multi-rate scheduler (fire 30Hz, plants 5Hz)
-- [ ] Implement chunk sleeping (skip inactive chunks)
+- [x] Implement multi-rate scheduler (fire 30Hz, plants 5Hz)
+- [x] Implement chunk sleeping (skip inactive chunks)
 - [ ] Add worker pool for parallel chunk processing (benchmark first)
+
+## Phase 2 — Ecosystem & Environment
+
+- [x] Implement creature system (herbivores graze plants, predators hunt herbivores)
+- [x] Add creature spawning rules (population caps, biome requirements)
+- [x] Implement weather system (cloud formation from moisture, rain events, lightning)
+- [x] Add wind-driven weather pattern movement across chunks
+- [x] Implement terrain erosion (water flow carves channels over time)
+- [x] Add sediment deposition in low-velocity water areas
+- [ ] Implement creature migration (seasonal movement between biomes)
+- [ ] Add food chain energy transfer model
+- [ ] Implement day/night cycle affecting temperature and creature behavior

@@ -16,6 +16,13 @@
 - [x] Send ERROR message on invalid power request
 - [x] Wire action queue drain into engine tick (before material sim)
 - [x] Broadcast PLAYER_STATE (cursor + active power) to all clients
-- [ ] Add power cooldown (minimum ticks between activations)
-- [ ] Visual feedback: send power-effect overlay data to clients
+- [x] Add power cooldown (minimum ticks between activations)
+- [x] Visual feedback: send power-effect overlay data to clients
 - [ ] Balance pass: tune radius/cost values based on playtest feedback
+
+## Phase 2 — Expanded Powers
+
+- [x] Implement Life power (spawn creatures in radius when biome conditions met)
+- [ ] Add power combos (Rain + Heat = steam/fog, Wind + Fire = firestorm spread)
+- [ ] Implement power leveling (repeated use in same biome unlocks stronger variants)
+- [ ] Add visual particle trails showing power influence area

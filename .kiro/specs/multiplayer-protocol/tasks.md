@@ -20,7 +20,15 @@
 - [x] Add drop-oldest policy to send queue when full
 - [x] Add backpressure warning log at 75% queue capacity
 - [x] Implement input validation (bounds, material ID, influence budget)
-- [ ] Add protocol version check on WELCOME; disconnect mismatched clients
-- [ ] Implement reconnect token (optional session resume)
-- [ ] Add rate limiting per client (max messages/sec)
+- [x] Add protocol version check on WELCOME; disconnect mismatched clients
+- [x] Implement reconnect token (optional session resume)
+- [x] Add rate limiting per client (max messages/sec)
 - [ ] Write integration test: 10 concurrent clients, verify no data race
+
+## Phase 2 — Multi-World & Scaling
+
+- [x] Implement multi-world routing (hub-per-world, client selects on connect)
+- [x] Add cursor broadcast optimization (spatial filtering, only send nearby cursors)
+- [ ] Implement world migration (move client between worlds without full reconnect)
+- [ ] Add spectator mode (read-only connection, no influence budget)
+- [ ] Implement world persistence (snapshot to disk on graceful shutdown)

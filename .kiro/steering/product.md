@@ -35,3 +35,20 @@ Create a persistent shared world whose physics and environmental systems run ent
 
 ## Steering Rule
 > Never turn WorldWeaver into a traditional content-heavy game. Prefer deeper simulation and networking quality over additional surface-level features.
+
+## Expanded Vision (Phase 2)
+
+### Ecosystem Simulation
+Creatures emerge from the physics layer — herbivores graze plant material, predators hunt herbivores. Population dynamics create feedback loops: overgrazed biomes lose moisture retention, triggering desertification unless players intervene with Rain/Growth powers. The Life power lets players seed creatures directly.
+
+### Weather & Erosion
+Weather is emergent from the moisture/temperature simulation: clouds form when moisture exceeds thresholds at altitude, rain events redistribute water, lightning ignites dry material. Water flow over time erodes terrain, carving rivers and depositing sediment — the world visibly ages.
+
+### 2.5D Rendering
+The client renders depth layers to convey elevation, weather clouds above terrain, and underground water flow. This is purely a presentation concern — the server simulation remains 2D grid-based with height as a cell property.
+
+### World Stability Scoring
+A real-time "World Health" metric visible to all players: biodiversity index, temperature variance, moisture balance. This provides a collaborative objective without explicit quests — players naturally cooperate to stabilize ecosystems.
+
+### Multi-World Architecture
+The server hosts multiple independent worlds. Players choose a world on connect. Each world runs its own simulation loop and hub. This enables themed worlds (volcanic, arctic, lush) and load distribution across cores.
