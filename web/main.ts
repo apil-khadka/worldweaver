@@ -48,24 +48,13 @@ async function main() {
   const wrapper = document.getElementById("canvas-wrapper") as HTMLDivElement;
   const overlayCanvas = document.getElementById("power-overlay") as HTMLCanvasElement;
 
-  // ── Create initial renderer (default: PixiJS 8) ──────────────────────────
+  // ── Create initial renderer (PixiJS 8 — GPU accelerated) ─────────────────
   let renderer: IGameRenderer;
-  let pixiRenderer: PixiWorldRenderer | null = null;
 
-  if (isPixiAvailable()) {
-    try {
-      const pixi = new PixiWorldRenderer(canvas);
-      await pixi.init();
-      pixiRenderer = pixi;
-      renderer = pixi;
-      console.info("[main] using PixiJS 8 renderer (GPU-accelerated)");
-    } catch (e) {
-      console.warn("[main] PixiJS init failed, trying fallbacks:", e);
-      renderer = createFallbackRenderer(canvas);
-    }
-  } else {
-    renderer = createFallbackRenderer(canvas);
-  }
+  const pixi = new PixiWorldRenderer(canvas);
+  await pixi.init();
+  renderer = pixi;
+  console.info("[main] using PixiJS 8 renderer (GPU-accelerated)");
 
   // Track which renderer is active (can be swapped by the view toggle)
   let activeRenderer: IGameRenderer = renderer;
@@ -189,7 +178,8 @@ async function main() {
   let viewMode: "2.5D" | "2D" = renderer instanceof IsometricRenderer ? "2.5D" : "2D";
 
   const viewToggle = document.getElementById("view-toggle") as HTMLButtonElement | null;
-  if (viewToggle && pixiRenderer) {
+  if (viewToggle) {
+    viewToggle.style.display = "none"; // PixiJS handles rendering
     // PixiJS active: hide the legacy view toggle
     viewToggle.style.display = "none";
   } else if (viewToggle) {

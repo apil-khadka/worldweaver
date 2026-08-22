@@ -257,7 +257,8 @@ export class PixiWorldRenderer implements IWorldRenderer {
         uPalette: this.paletteTexture.source,
       },
     });
-    this.materialSprite.filters = [this.materialFilter];
+    // No custom filter needed — we upload pre-colored RGBA directly
+    // this.materialSprite.filters = [this.materialFilter];
   }
 
   /** Step zoom in or out. Returns new zoom level. */
@@ -320,18 +321,19 @@ export class PixiWorldRenderer implements IWorldRenderer {
     this.updateCreatures();
   }
 
-  /** Upload material cache to GPU texture */
+  /** Upload material cache to GPU texture — maps material IDs to RGBA colors directly */
   private uploadMaterialTexture(): void {
     if (!this.materialCache || !this.materialTextureSource) return;
     const w = this.worldW;
     const h = this.worldH;
     const texData = new Uint8Array(w * h * 4);
     for (let i = 0; i < w * h; i++) {
-      // Store material ID in R channel as byte value
-      texData[i * 4] = this.materialCache[i];
-      texData[i * 4 + 1] = 0;
-      texData[i * 4 + 2] = 0;
-      texData[i * 4 + 3] = 255;
+      const mat = this.materialCache[i];
+      const p = mat * 4;
+      texData[i * 4]     = PALETTE_DATA[p]     ?? 13;
+      texData[i * 4 + 1] = PALETTE_DATA[p + 1] ?? 13;
+      texData[i * 4 + 2] = PALETTE_DATA[p + 2] ?? 16;
+      texData[i * 4 + 3] = PALETTE_DATA[p + 3] ?? 255;
     }
     this.materialTextureSource.resource = texData;
     this.materialTextureSource.update();
