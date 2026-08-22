@@ -36,6 +36,10 @@ async function main() {
   const selection = await lobby.show();
   lobby.hide();
 
+  // Show loading overlay while connecting
+  const loadingOverlay = document.getElementById("loading-overlay");
+  if (loadingOverlay) loadingOverlay.classList.add("visible");
+
   // Show the game UI
   document.getElementById("game-container")!.classList.add("visible");
 
@@ -92,6 +96,14 @@ async function main() {
   ui.attach();
   effects.attach();
   minimap.start();
+
+  // Hide loading overlay on connection
+  const origOnConnected = network.callbacks.onConnected;
+  network.callbacks.onConnected = () => {
+    origOnConnected?.();
+    const lo = document.getElementById("loading-overlay");
+    if (lo) lo.classList.remove("visible");
+  };
 
   // ── Social systems (chat, pings, emotes, combos) ─────────────────────────
   const gameContainerEl = document.getElementById("game-container")!;

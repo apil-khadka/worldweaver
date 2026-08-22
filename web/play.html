@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="ww-ws-url" content="" /> <!-- Set to backend WSS URL if proxy doesn't support WebSocket (e.g. wss://api.example.com/ws) -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WorldWeaver — One World. Many Forces.</title>
   <style>
@@ -724,12 +725,15 @@
       position: fixed;
       inset: 0;
       z-index: 99999;
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(145deg, #1A0F08 0%, #2C1810 30%, #1A0F08 100%);
+      background: linear-gradient(145deg, #0F1923 0%, #1B2838 30%, #0A1628 70%, #162233 100%);
       transition: opacity 0.8s ease, visibility 0.8s ease;
+    }
+    #loading-overlay.visible {
+      display: flex;
     }
     #loading-overlay.hidden {
       opacity: 0;
@@ -741,7 +745,7 @@
       font-weight: 900;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      background: linear-gradient(135deg, #D4881A 0%, #F5C563 40%, #D4881A 70%, #A66510 100%);
+      background: linear-gradient(135deg, #00D4FF 0%, #7B61FF 40%, #00D4FF 70%, #FF6B6B 100%);
       background-size: 200% 100%;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
