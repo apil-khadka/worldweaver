@@ -38,6 +38,7 @@ const (
 	Ash   ID = 11
 	Oil   ID = 12
 	Ember ID = 13
+	Cloud ID = 16
 )
 
 // Def describes the physical and simulation properties of a material.
@@ -97,6 +98,7 @@ func init() {
 		{ID: Ash,   Name: "ash",    Density: 10,  Movable: true,  VisualClass: "ash"},
 		{ID: Oil,   Name: "oil",    Density: 60,  Movable: true,  Liquid: true, Flammable: true, VisualClass: "oil"},
 		{ID: Ember, Name: "ember",  Density: 5,   Movable: true,  Transient: true, Flammable: false, VisualClass: "ember"},
+		{ID: Cloud, Name: "cloud",  Density: 0,   Movable: true,  Gas: true, VisualClass: "cloud"},
 	}
 	for _, d := range defs {
 		registry[d.ID] = d

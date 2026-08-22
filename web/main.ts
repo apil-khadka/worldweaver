@@ -18,6 +18,7 @@ import { WorldRenderer } from "./renderer.js";
 import { InputHandler } from "./input.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
+import { Minimap } from "./minimap.js";
 
 const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
 const wrapper = document.getElementById("canvas-wrapper") as HTMLDivElement;
@@ -38,6 +39,8 @@ const network  = new WorldNetwork(buildWsUrl(), renderer);
 const ui       = new UIController(network);
 const input    = new InputHandler(canvas, network, renderer);
 const effects  = new PowerEffects(overlayCanvas, canvas, renderer);
+const minimapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
+const minimap  = new Minimap(minimapCanvas, renderer, canvas);
 
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
@@ -46,6 +49,7 @@ network.connect();
 input.attach();
 ui.attach();
 effects.attach();
+minimap.start();
 
 // Sync power selection to effects overlay
 document.querySelectorAll<HTMLButtonElement>(".power-btn").forEach((btn) => {

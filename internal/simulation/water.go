@@ -96,6 +96,10 @@ func simulateWater(w *world.World, x, y int) {
 	}
 
 	wetSoilAround(w, x, y)
+
+	// Water didn't move this tick — try sediment deposition and decay activity.
+	applyStillDeposition(w, x, y)
+	decayErosionActivity(w, x, y)
 }
 
 func tryDiagWater(w *world.World, x, y, dx int) bool {
@@ -104,6 +108,7 @@ func tryDiagWater(w *world.World, x, y, dx int) bool {
 		w.Swap(x, y, x+dx, y+1)
 		markMoved(w, x+dx, y+1)
 		wetSoilAround(w, x+dx, y+1)
+		applyFlowErosion(w, x+dx, y+1)
 		return true
 	}
 	// Also displace oil diagonally
@@ -120,6 +125,7 @@ func tryLateralWater(w *world.World, x, y, dx int) bool {
 		w.Swap(x, y, x+dx, y)
 		markMoved(w, x+dx, y)
 		wetSoilAround(w, x+dx, y)
+		applyFlowErosion(w, x+dx, y)
 		return true
 	}
 	return false

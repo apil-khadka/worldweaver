@@ -30,6 +30,9 @@ const enum Mat {
   Ash   = 11,
   Oil   = 12,
   Ember = 13,
+  Herbivore = 14,
+  Predator  = 15,
+  Cloud     = 16,
 }
 
 /** RGBA palette for each material ID. Index = mat * 4, layout = [r, g, b, a] */
@@ -48,6 +51,9 @@ const PALETTE = new Uint8Array([
   /* Ash   */ 50,  45,  40,  200,
   /* Oil   */ 80,  60,  20,  255,
   /* Ember */ 200, 50,  10,  180,
+  /* Herbivore */ 100, 200, 60,  255,
+  /* Predator  */ 220, 50,  50,  255,
+  /* Cloud    */ 200, 200, 220, 180,
 ]);
 
 export interface ChunkUpdate {
@@ -136,6 +142,11 @@ export class WorldRenderer {
   onResize(): void {
     this.imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
     this.draw();
+  }
+
+  /** Expose material cache for minimap rendering. */
+  getMaterialCache(): Uint8Array | null {
+    return this.materialCache;
   }
 
   private draw(): void {

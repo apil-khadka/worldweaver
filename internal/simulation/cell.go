@@ -33,6 +33,12 @@ func simulateCell(w *world.World, x, y int) {
 		simulateOil(w, x, y)
 	case world.MatLava:
 		simulateLava(w, x, y)
+	case world.MatHerbivore:
+		simulateHerbivore(w, x, y)
+	case world.MatPredator:
+		simulatePredator(w, x, y)
+	case world.MatCloud:
+		simulateCloud(w, x, y)
 	}
 }
 

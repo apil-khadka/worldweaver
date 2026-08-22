@@ -153,6 +153,9 @@ func (e *Engine) tick() {
 	// Environmental pass — only on active chunks.
 	updateEnvironmentChunked(w)
 
+	// Weather cycle pass — evaporation & cloud formation on active chunks.
+	updateWeatherCycle(w)
+
 	// Update sleep states at end of tick.
 	w.UpdateSleepStates()
 

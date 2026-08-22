@@ -14,6 +14,7 @@ const (
 	PowerHeat
 	PowerWind
 	PowerGrowth
+	PowerLife // 4 — spawns herbivores
 )
 
 // PlayerAction represents a validated player input to be applied to the world.
@@ -50,6 +51,8 @@ func applyAction(w *world.World, a PlayerAction) {
 				applyGrowth(w, x, y, i, a.Intensity)
 			case PowerWind:
 				applyWind(w, x, y, i, a.Intensity)
+			case PowerLife:
+				applyLife(w, x, y, i, a.Intensity)
 			}
 		}
 	}
@@ -88,17 +91,42 @@ func applyGrowth(w *world.World, x, y, i int, intensity float32) {
 	}
 }
 
-// applyWind nudges sand, smoke, and lighter materials horizontally.
+// applyWind nudges sand, smoke, cloud, and lighter materials horizontally.
 func applyWind(w *world.World, x, y, i int, intensity float32) {
 	mat := w.Material[i]
-	if mat == world.MatSand || mat == world.MatSmoke || mat == world.MatVapor || mat == world.MatEmber {
+	if mat == world.MatSand || mat == world.MatSmoke || mat == world.MatVapor || mat == world.MatEmber || mat == world.MatCloud {
 		dx := 1
 		if intensity < 0 {
 			dx = -1
 		}
-		if w.GetMaterial(x+dx, y) == world.MatEmpty {
-			w.Swap(x, y, x+dx, y)
-			markMoved(w, x+dx, y)
+		// Cloud cells get pushed 2 cells (power=2) for stronger directional control
+		if mat == world.MatCloud {
+			nx := x + dx
+			if w.GetMaterial(nx, y) == world.MatEmpty {
+				w.Swap(x, y, nx, y)
+				markMoved(w, nx, y)
+				// Second push
+				nx2 := nx + dx
+				if w.GetMaterial(nx2, y) == world.MatEmpty {
+					w.Swap(nx, y, nx2, y)
+					markMoved(w, nx2, y)
+				}
+			}
+		} else {
+			if w.GetMaterial(x+dx, y) == world.MatEmpty {
+				w.Swap(x, y, x+dx, y)
+				markMoved(w, x+dx, y)
+			}
+		}
+	}
+}
+
+// applyLife spawns herbivore creatures on empty cells.
+func applyLife(w *world.World, x, y, i int, intensity float32) {
+	if w.Material[i] == world.MatEmpty {
+		if w.RNG().Float32() < intensity*0.08 {
+			w.SetMaterial(x, y, world.MatHerbivore)
+			w.Temperature[i] = int16(herbivoreInitialEnergy)
 		}
 	}
 }

@@ -40,6 +40,13 @@ func updateEnvironmentChunked(w *world.World) {
 				for x := startX; x < endX; x++ {
 					i := y*w.Width + x
 
+					// Skip temperature decay for creature cells — they use
+					// the Temperature field as an energy counter.
+					mat := w.Material[i]
+					if world.IsCreature(mat) {
+						continue
+					}
+
 					// Temperature decay toward ambient (0)
 					if w.Temperature[i] > 0 {
 						w.Temperature[i] -= tempDecayRate
@@ -53,8 +60,6 @@ func updateEnvironmentChunked(w *world.World) {
 							w.Temperature[i] = 0
 						}
 					}
-
-					mat := w.Material[i]
 
 					// Water evaporation at very high temperature
 					if mat == world.MatWater && w.Temperature[i] > evapTempThreshold {

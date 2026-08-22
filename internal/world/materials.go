@@ -16,6 +16,9 @@ const (
 	MatAsh                // 11
 	MatOil                // 12
 	MatEmber              // 13
+	MatHerbivore          // 14
+	MatPredator           // 15
+	MatCloud              // 16
 )
 
 // MaterialName returns a human-readable name for debug/serialization.
@@ -49,6 +52,12 @@ func MaterialName(m uint8) string {
 		return "oil"
 	case MatEmber:
 		return "ember"
+	case MatHerbivore:
+		return "herbivore"
+	case MatPredator:
+		return "predator"
+	case MatCloud:
+		return "cloud"
 	default:
 		return "unknown"
 	}
@@ -57,7 +66,7 @@ func MaterialName(m uint8) string {
 // IsSolid returns true for materials that block downward movement.
 func IsSolid(m uint8) bool {
 	switch m {
-	case MatRock, MatSoil, MatSand, MatPlant, MatIce:
+	case MatRock, MatSoil, MatSand, MatPlant, MatIce, MatHerbivore, MatPredator:
 		return true
 	}
 	return false
@@ -75,12 +84,17 @@ func IsLiquid(m uint8) bool {
 
 // IsGas returns true for materials that rise upward.
 func IsGas(m uint8) bool {
-	return m == MatVapor || m == MatSmoke || m == MatEmpty
+	return m == MatVapor || m == MatSmoke || m == MatEmpty || m == MatCloud
 }
 
 // IsTransient returns true for materials with a finite lifetime.
 func IsTransient(m uint8) bool {
 	return m == MatFire || m == MatVapor || m == MatSmoke || m == MatEmber
+}
+
+// IsCreature returns true for living creature materials.
+func IsCreature(m uint8) bool {
+	return m == MatHerbivore || m == MatPredator
 }
 
 // Density returns a relative density value for liquid displacement.
@@ -89,7 +103,7 @@ func Density(m uint8) uint8 {
 	switch m {
 	case MatEmpty:
 		return 0
-	case MatVapor, MatSmoke:
+	case MatVapor, MatSmoke, MatCloud:
 		return 5
 	case MatOil:
 		return 60
