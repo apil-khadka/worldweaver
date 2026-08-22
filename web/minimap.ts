@@ -6,7 +6,7 @@
  * Shows a white rectangle indicating the current viewport.
  */
 
-import { WorldRenderer } from "./renderer.js";
+import { IGameRenderer } from "./network.js";
 
 /** How many world cells map to one minimap pixel */
 const SCALE = 8;
@@ -32,11 +32,11 @@ const PALETTE = new Uint8Array([
 export class Minimap {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
-  private readonly renderer: WorldRenderer;
+  private readonly renderer: IGameRenderer;
   private readonly viewCanvas: HTMLCanvasElement;
   private intervalId: number | null = null;
 
-  constructor(canvas: HTMLCanvasElement, renderer: WorldRenderer, viewCanvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, renderer: IGameRenderer, viewCanvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.renderer = renderer;
     this.viewCanvas = viewCanvas;

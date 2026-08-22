@@ -10,7 +10,7 @@
  *   Herbivore=14, Predator=15, Cloud=16
  */
 
-import { WorldRenderer } from "./renderer.js";
+import { IGameRenderer } from "./network.js";
 import { PowerEffects } from "./effects.js";
 
 const enum Mat {
@@ -26,7 +26,7 @@ const enum Mat {
 
 export class ClientPrediction {
   constructor(
-    private readonly renderer: WorldRenderer,
+    private readonly renderer: IGameRenderer,
     private readonly effects: PowerEffects,
   ) {}
 

@@ -16,8 +16,9 @@
  */
 
 import { Lobby } from "./lobby.js";
-import { WorldNetwork } from "./network.js";
+import { WorldNetwork, type IGameRenderer } from "./network.js";
 import { WorldRenderer } from "./renderer.js";
+import { WebGL2WorldRenderer, isWebGL2Available } from "./webgl2-renderer.js";
 import { InputHandler } from "./input.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
@@ -43,10 +44,23 @@ async function main() {
     canvas.height = wrapper.clientHeight;
     overlayCanvas.width  = wrapper.clientWidth;
     overlayCanvas.height = wrapper.clientHeight;
+    renderer.onResize();
     effects.resize(wrapper.clientWidth, wrapper.clientHeight);
   }
 
-  const renderer = new WorldRenderer(canvas);
+  const renderer = (() => {
+    if (isWebGL2Available()) {
+      try {
+        const gl2 = new WebGL2WorldRenderer(canvas);
+        console.info("[main] using WebGL2 renderer (GPU-accelerated)");
+        return gl2;
+      } catch (e) {
+        console.warn("[main] WebGL2 init failed, falling back to Canvas2D:", e);
+      }
+    }
+    console.info("[main] using Canvas2D renderer (fallback)");
+    return new WorldRenderer(canvas);
+  })();
   const wsUrl = buildWsUrl(selection.token, selection.worldID);
   const network  = new WorldNetwork(wsUrl, renderer);
   const ui       = new UIController(network);

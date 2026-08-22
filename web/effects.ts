@@ -7,7 +7,7 @@
  *  2. Application flash: expanding ring that fades out over 300ms on click/drag.
  */
 
-import { WorldRenderer } from "./renderer.js";
+import { IGameRenderer } from "./network.js";
 
 /** Power index → RGBA colour string */
 const POWER_COLORS: Record<number, string> = {
@@ -63,7 +63,7 @@ export class PowerEffects {
   constructor(
     private readonly overlay: HTMLCanvasElement,
     private readonly worldCanvas: HTMLCanvasElement,
-    private readonly renderer: WorldRenderer,
+    private readonly renderer: IGameRenderer,
   ) {
     const ctx = overlay.getContext("2d");
     if (!ctx) throw new Error("Overlay canvas 2D not supported");

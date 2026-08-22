@@ -4,39 +4,53 @@
  * Captures:
  *  - Mouse click/drag → apply selected power at world coordinates
  *  - Touch drag       → apply selected power (mobile)
- *  - WASD / arrow     → pan camera
+ *  - WASD / arrow     → pan camera with momentum (acceleration/friction)
  *  - Number keys 1-4  → select power
- *  - Scroll wheel     → zoom (stretch feature, currently stubbed)
+ *  - Scroll wheel / pinch → zoom (0.5x, 1x, 2x, 4x)
  *
  * Converts screen coordinates to world coordinates by subtracting the
- * renderer's viewport origin.  The renderer is the single source of truth
- * for the current viewport position.
+ * renderer's viewport origin and accounting for zoom scale.
+ * The renderer is the single source of truth for the current viewport position.
  */
 
-import { WorldNetwork } from "./network.js";
-import { WorldRenderer } from "./renderer.js";
+import { WorldNetwork, IGameRenderer } from "./network.js";
 import { ClientPrediction } from "./prediction.js";
 
 const POWER_KEYS: Record<string, number> = {
   "1": 0, "2": 1, "3": 2, "4": 3,
 };
-const CAM_SPEED = 8; // cells per keyboard press
+
+// ── Camera momentum constants ────────────────────────────────────────────────
+const CAM_MAX_SPEED   = 16;   // cells/frame
+const CAM_ACCEL       = 2;    // cells/frame²
+const CAM_FRICTION    = 0.85; // velocity multiplier per frame when no input
 
 export class InputHandler {
   private applying = false;
   private lastPowerX = 0;
   private lastPowerY = 0;
+
+  // ── Camera momentum state ────────────────────────────────────────────────
   private panKeys = new Set<string>();
-  private panLoop: ReturnType<typeof setInterval> | null = null;
+  private velX = 0;
+  private velY = 0;
+  private animFrame: number | null = null;
+
   private lastCursorSend = 0;
   private readonly CURSOR_THROTTLE_MS = 100; // 10Hz
   prediction: ClientPrediction | null = null;
 
+  // ── Zoom indicator ────────────────────────────────────────────────────────
+  private zoomIndicator: HTMLElement | null = null;
+  private zoomHideTimeout: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly network: WorldNetwork,
-    private readonly renderer: WorldRenderer,
-  ) {}
+    private readonly renderer: IGameRenderer,
+  ) {
+    this.zoomIndicator = document.getElementById("zoom-indicator");
+  }
 
   attach(): void {
     // Mouse
@@ -54,6 +68,9 @@ export class InputHandler {
     window.addEventListener("keydown", (e) => this.onKeyDown(e));
     window.addEventListener("keyup",   (e) => this.onKeyUp(e));
 
+    // Zoom: mouse wheel
+    this.canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+
     // Power button clicks in the toolbar
     document.querySelectorAll<HTMLButtonElement>(".power-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -62,15 +79,19 @@ export class InputHandler {
         this.updatePowerButtons(p);
       });
     });
+
+    // Start camera animation loop
+    this.startCameraLoop();
   }
 
   private screenToWorld(clientX: number, clientY: number): [number, number] {
     const rect = this.canvas.getBoundingClientRect();
     const sx   = clientX - rect.left;
     const sy   = clientY - rect.top;
+    const zoom = this.renderer.zoom;
     return [
-      Math.floor(this.renderer.viewX + sx),
-      Math.floor(this.renderer.viewY + sy),
+      Math.floor(this.renderer.viewX + sx / zoom),
+      Math.floor(this.renderer.viewY + sy / zoom),
     ];
   }
 
@@ -117,6 +138,31 @@ export class InputHandler {
     this.applying = false;
   }
 
+  // ── Zoom ─────────────────────────────────────────────────────────────────
+  private onWheel(e: WheelEvent): void {
+    e.preventDefault();
+    const direction: 1 | -1 = e.deltaY < 0 ? 1 : -1;
+    const newZoom = this.renderer.stepZoom(direction);
+    this.showZoomIndicator(newZoom);
+
+    // Notify network of new visible area
+    this.network.sendViewport(
+      this.renderer.viewX, this.renderer.viewY,
+      this.renderer.visibleW, this.renderer.visibleH,
+    );
+  }
+
+  private showZoomIndicator(zoom: number): void {
+    if (!this.zoomIndicator) return;
+    this.zoomIndicator.textContent = zoom < 1 ? `${zoom}×` : `${zoom}×`;
+    this.zoomIndicator.classList.add("visible");
+    if (this.zoomHideTimeout) clearTimeout(this.zoomHideTimeout);
+    this.zoomHideTimeout = setTimeout(() => {
+      this.zoomIndicator?.classList.remove("visible");
+    }, 1500);
+  }
+
+  // ── Keyboard ─────────────────────────────────────────────────────────────
   private onKeyDown(e: KeyboardEvent): void {
     // Power selection
     if (e.key in POWER_KEYS) {
@@ -126,41 +172,80 @@ export class InputHandler {
       return;
     }
 
-    // Camera pan
-    this.panKeys.add(e.key);
-    if (!this.panLoop) {
-      this.panLoop = setInterval(() => this.processPan(), 33);
+    // Zoom with +/- keys
+    if (e.key === "=" || e.key === "+") {
+      const z = this.renderer.stepZoom(1);
+      this.showZoomIndicator(z);
+      return;
     }
+    if (e.key === "-") {
+      const z = this.renderer.stepZoom(-1);
+      this.showZoomIndicator(z);
+      return;
+    }
+
+    // Camera pan keys
+    this.panKeys.add(e.key);
   }
 
   private onKeyUp(e: KeyboardEvent): void {
     this.panKeys.delete(e.key);
-    if (this.panKeys.size === 0 && this.panLoop) {
-      clearInterval(this.panLoop);
-      this.panLoop = null;
-    }
   }
 
-  private processPan(): void {
-    let dx = 0;
-    let dy = 0;
-    if (this.panKeys.has("ArrowLeft")  || this.panKeys.has("a")) dx -= CAM_SPEED;
-    if (this.panKeys.has("ArrowRight") || this.panKeys.has("d")) dx += CAM_SPEED;
-    if (this.panKeys.has("ArrowUp")    || this.panKeys.has("w")) dy -= CAM_SPEED;
-    if (this.panKeys.has("ArrowDown")  || this.panKeys.has("s")) dy += CAM_SPEED;
+  // ── Camera animation loop (requestAnimationFrame) ────────────────────────
+  private startCameraLoop(): void {
+    const tick = () => {
+      this.updateCamera();
+      this.animFrame = requestAnimationFrame(tick);
+    };
+    this.animFrame = requestAnimationFrame(tick);
+  }
 
-    if (dx === 0 && dy === 0) return;
+  private updateCamera(): void {
+    // Determine input direction
+    let inputX = 0;
+    let inputY = 0;
+    if (this.panKeys.has("ArrowLeft")  || this.panKeys.has("a")) inputX -= 1;
+    if (this.panKeys.has("ArrowRight") || this.panKeys.has("d")) inputX += 1;
+    if (this.panKeys.has("ArrowUp")    || this.panKeys.has("w")) inputY -= 1;
+    if (this.panKeys.has("ArrowDown")  || this.panKeys.has("s")) inputY += 1;
 
-    this.renderer.viewX = Math.max(0,
-      Math.min(this.renderer.worldW - this.canvas.width,
-        this.renderer.viewX + dx));
-    this.renderer.viewY = Math.max(0,
-      Math.min(this.renderer.worldH - this.canvas.height,
-        this.renderer.viewY + dy));
+    // Apply acceleration
+    if (inputX !== 0) {
+      this.velX += inputX * CAM_ACCEL;
+    } else {
+      this.velX *= CAM_FRICTION;
+    }
+    if (inputY !== 0) {
+      this.velY += inputY * CAM_ACCEL;
+    } else {
+      this.velY *= CAM_FRICTION;
+    }
 
+    // Clamp velocity
+    this.velX = Math.max(-CAM_MAX_SPEED, Math.min(CAM_MAX_SPEED, this.velX));
+    this.velY = Math.max(-CAM_MAX_SPEED, Math.min(CAM_MAX_SPEED, this.velY));
+
+    // Kill tiny residual velocity
+    if (Math.abs(this.velX) < 0.1) this.velX = 0;
+    if (Math.abs(this.velY) < 0.1) this.velY = 0;
+
+    if (this.velX === 0 && this.velY === 0) return;
+
+    // Move viewport (account for zoom: visible world cells = canvas / zoom)
+    const maxViewX = Math.max(0, this.renderer.worldW - this.renderer.visibleW);
+    const maxViewY = Math.max(0, this.renderer.worldH - this.renderer.visibleH);
+
+    this.renderer.viewX = Math.max(0, Math.min(maxViewX, this.renderer.viewX + this.velX));
+    this.renderer.viewY = Math.max(0, Math.min(maxViewY, this.renderer.viewY + this.velY));
+
+    // Trigger redraw
+    this.renderer.drawImmediate();
+
+    // Notify server of viewport change
     this.network.sendViewport(
       this.renderer.viewX, this.renderer.viewY,
-      this.canvas.width,   this.canvas.height,
+      this.renderer.visibleW, this.renderer.visibleH,
     );
   }
 

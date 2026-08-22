@@ -72,7 +72,26 @@ export interface FullSnapshot {
   data: Uint8Array;
 }
 
-export class WorldRenderer {
+/** Shared interface for all renderer implementations (Canvas2D and WebGL2). */
+export interface IWorldRenderer {
+  viewX: number;
+  viewY: number;
+  worldW: number;
+  worldH: number;
+  chunkSize: number;
+  zoom: number;
+  readonly visibleW: number;
+  readonly visibleH: number;
+  initWorld(w: number, h: number): void;
+  stepZoom(direction: 1 | -1): number;
+  applySnapshot(snap: FullSnapshot): void;
+  applyChunkUpdates(updates: ChunkUpdate[]): void;
+  onResize(): void;
+  getMaterialCache(): Uint8Array | null;
+  drawImmediate(): void;
+}
+
+export class WorldRenderer implements IWorldRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private imageData: ImageData;
 
@@ -86,6 +105,12 @@ export class WorldRenderer {
 
   /** Chunk size in cells — must match the server ChunkSize */
   chunkSize = 64;
+
+  /** Zoom scale — 0.5, 1, 2, or 4 */
+  zoom = 1;
+
+  /** Discrete zoom levels */
+  private static readonly ZOOM_LEVELS = [0.5, 1, 2, 4];
 
   /** Local material cache. Indexed as [y * worldW + x]. */
   private materialCache: Uint8Array | null = null;
@@ -102,6 +127,24 @@ export class WorldRenderer {
     this.worldW = w;
     this.worldH = h;
     this.materialCache = new Uint8Array(w * h);
+  }
+
+  /** Step zoom in or out. Returns new zoom level. */
+  stepZoom(direction: 1 | -1): number {
+    const levels = WorldRenderer.ZOOM_LEVELS;
+    const curIdx = levels.indexOf(this.zoom);
+    const newIdx = Math.max(0, Math.min(levels.length - 1, curIdx + direction));
+    this.zoom = levels[newIdx];
+    this.onResize();
+    return this.zoom;
+  }
+
+  /** How many world cells are visible horizontally/vertically */
+  get visibleW(): number {
+    return Math.ceil(this.canvas.width / this.zoom);
+  }
+  get visibleH(): number {
+    return Math.ceil(this.canvas.height / this.zoom);
   }
 
   /** Apply a full viewport snapshot from the server. */
@@ -161,21 +204,45 @@ export class WorldRenderer {
     const buf = this.imageData.data;
     const wx0 = this.viewX;
     const wy0 = this.viewY;
+    const zoom = this.zoom;
 
-    for (let py = 0; py < ch; py++) {
-      const wy = wy0 + py;
-      for (let px = 0; px < cw; px++) {
-        const wx = wx0 + px;
-        let mat = 0;
-        if (wx >= 0 && wx < this.worldW && wy >= 0 && wy < this.worldH) {
-          mat = this.materialCache[wy * this.worldW + wx];
+    if (zoom >= 1) {
+      // Each world cell → zoom×zoom screen pixels
+      const cellPx = zoom;
+      for (let py = 0; py < ch; py++) {
+        const wy = wy0 + Math.floor(py / cellPx);
+        for (let px = 0; px < cw; px++) {
+          const wx = wx0 + Math.floor(px / cellPx);
+          let mat = 0;
+          if (wx >= 0 && wx < this.worldW && wy >= 0 && wy < this.worldH) {
+            mat = this.materialCache[wy * this.worldW + wx];
+          }
+          const p = (py * cw + px) * 4;
+          const m = mat * 4;
+          buf[p]     = PALETTE[m];
+          buf[p + 1] = PALETTE[m + 1];
+          buf[p + 2] = PALETTE[m + 2];
+          buf[p + 3] = PALETTE[m + 3];
         }
-        const p  = (py * cw + px) * 4;
-        const m  = mat * 4;
-        buf[p]     = PALETTE[m];
-        buf[p + 1] = PALETTE[m + 1];
-        buf[p + 2] = PALETTE[m + 2];
-        buf[p + 3] = PALETTE[m + 3];
+      }
+    } else {
+      // Downsample: each screen pixel covers multiple world cells (nearest neighbor)
+      const step = 1 / zoom; // e.g. 2 world cells per pixel at 0.5x
+      for (let py = 0; py < ch; py++) {
+        const wy = wy0 + Math.floor(py * step);
+        for (let px = 0; px < cw; px++) {
+          const wx = wx0 + Math.floor(px * step);
+          let mat = 0;
+          if (wx >= 0 && wx < this.worldW && wy >= 0 && wy < this.worldH) {
+            mat = this.materialCache[wy * this.worldW + wx];
+          }
+          const p = (py * cw + px) * 4;
+          const m = mat * 4;
+          buf[p]     = PALETTE[m];
+          buf[p + 1] = PALETTE[m + 1];
+          buf[p + 2] = PALETTE[m + 2];
+          buf[p + 3] = PALETTE[m + 3];
+        }
       }
     }
 

@@ -12,7 +12,26 @@
  * Protocol reference: internal/network/protocol.go
  */
 
-import { WorldRenderer, ChunkUpdate, FullSnapshot } from "./renderer.js";
+import type { ChunkUpdate, FullSnapshot } from "./renderer.js";
+
+/** Renderer interface consumed by WorldNetwork — both Canvas2D and WebGL2 satisfy this. */
+export interface IGameRenderer {
+  viewX: number;
+  viewY: number;
+  worldW: number;
+  worldH: number;
+  chunkSize: number;
+  zoom: number;
+  readonly visibleW: number;
+  readonly visibleH: number;
+  initWorld(w: number, h: number): void;
+  applySnapshot(snap: FullSnapshot): void;
+  applyChunkUpdates(updates: ChunkUpdate[]): void;
+  getMaterialCache(): Uint8Array | null;
+  drawImmediate(): void;
+  onResize(): void;
+  stepZoom(direction: 1 | -1): number;
+}
 
 const RECONNECT_DELAY_MS = 2000;
 
@@ -73,7 +92,7 @@ export class WorldNetwork {
 
   constructor(
     private readonly wsUrl: string,
-    private readonly renderer: WorldRenderer,
+    private readonly renderer: IGameRenderer,
   ) {}
 
   connect(): void {
