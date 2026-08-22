@@ -12,6 +12,7 @@ import (
 // through the provided methods to ensure thread safety.
 type Player struct {
 	ID       uint32
+	Nickname string
 	mu       sync.RWMutex
 	influence float32
 	maxInfluence float32
@@ -29,15 +30,28 @@ type Player struct {
 }
 
 // playerIDCounter is used to assign unique IDs to new players.
-var playerIDCounter uint32
+var playerIDCounter atomic.Uint32
 
 // NewPlayer creates a new player with default settings.
 func NewPlayer() *Player {
 	return &Player{
-		ID:           atomic.AddUint32(&playerIDCounter, 1),
+		ID:           playerIDCounter.Add(1),
 		influence:    100,
 		maxInfluence: 100,
 		inflRegen:    0.5, // 0.5 influence points per simulation tick
+		viewW:        800,
+		viewH:        600,
+	}
+}
+
+// NewPlayerWithID creates a player with a specific ID and nickname (for authenticated sessions).
+func NewPlayerWithID(id uint32, nickname string) *Player {
+	return &Player{
+		ID:           id,
+		Nickname:     nickname,
+		influence:    100,
+		maxInfluence: 100,
+		inflRegen:    0.5,
 		viewW:        800,
 		viewH:        600,
 	}

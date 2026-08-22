@@ -15,6 +15,7 @@
 
 import { WorldNetwork } from "./network.js";
 import { WorldRenderer } from "./renderer.js";
+import { ClientPrediction } from "./prediction.js";
 
 const POWER_KEYS: Record<string, number> = {
   "1": 0, "2": 1, "3": 2, "4": 3,
@@ -29,6 +30,7 @@ export class InputHandler {
   private panLoop: ReturnType<typeof setInterval> | null = null;
   private lastCursorSend = 0;
   private readonly CURSOR_THROTTLE_MS = 100; // 10Hz
+  prediction: ClientPrediction | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -76,6 +78,8 @@ export class InputHandler {
     const [wx, wy] = this.screenToWorld(clientX, clientY);
     this.lastPowerX = wx;
     this.lastPowerY = wy;
+    // Client-side prediction: apply visual immediately before server round-trip
+    this.prediction?.predict(this.network.activePower, wx, wy, 24);
     this.network.sendPower(this.network.activePower, wx, wy);
   }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/worldweaver/worldweaver/internal/game"
 	"github.com/worldweaver/worldweaver/internal/metrics"
 	"github.com/worldweaver/worldweaver/internal/network"
 	"github.com/worldweaver/worldweaver/internal/simulation"
@@ -24,7 +25,7 @@ func TestFullStackIntegration(t *testing.T) {
 
 	m := metrics.New()
 	eng := simulation.NewEngine(w, m)
-	hub := network.NewHub(w, eng, m)
+	hub := network.NewHub(w, eng, m, game.NewScoreboard(), "test", game.NewAuthManager(), game.NewWorldManager(42, 128, 64))
 
 	staticFS := http.Dir("../web")
 	router := network.NewRouter(hub, w, m, staticFS)

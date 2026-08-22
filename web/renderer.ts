@@ -144,9 +144,14 @@ export class WorldRenderer {
     this.draw();
   }
 
-  /** Expose material cache for minimap rendering. */
+  /** Expose material cache for minimap rendering and client-side prediction. */
   getMaterialCache(): Uint8Array | null {
     return this.materialCache;
+  }
+
+  /** Public draw trigger for client-side prediction (immediate feedback). */
+  drawImmediate(): void {
+    this.draw();
   }
 
   private draw(): void {

@@ -33,12 +33,21 @@ const POWER_FLASH_COLORS: Record<number, string> = {
 
 const RADIUS = 24; // cells — matches server default power radius
 const FLASH_DURATION = 300; // ms
+const GLOW_DURATION = 500; // ms — slightly longer than flash for prediction
 
 interface FlashEffect {
   x: number;          // screen x
   y: number;          // screen y
   startTime: number;  // performance.now() when created
   power: number;      // power index for colour
+}
+
+interface GlowEffect {
+  wx: number;         // world x
+  wy: number;         // world y
+  radius: number;     // world-space radius
+  startTime: number;
+  power: number;
 }
 
 export class PowerEffects {
@@ -48,6 +57,7 @@ export class PowerEffects {
   private cursorVisible = false;
   private activePower = 0;
   private flashes: FlashEffect[] = [];
+  private glows: GlowEffect[] = [];
   private animating = false;
 
   constructor(
@@ -80,6 +90,19 @@ export class PowerEffects {
   /** Call from main when active power changes */
   setActivePower(power: number): void {
     this.activePower = power;
+    this.scheduleFrame();
+  }
+
+  /**
+   * Trigger a colored glow/pulse at a world position — called by ClientPrediction
+   * to reinforce the instant-feedback feel.
+   */
+  triggerGlow(wx: number, wy: number, power: number, radius: number): void {
+    this.glows.push({
+      wx, wy, radius,
+      startTime: performance.now(),
+      power,
+    });
     this.scheduleFrame();
   }
 
@@ -186,8 +209,44 @@ export class PowerEffects {
     }
     this.flashes = aliveFlashes;
 
-    // Keep animating if there are active flashes
-    if (this.flashes.length > 0) {
+    // ── Glow effects (world-space, for prediction feedback) ────
+    const aliveGlows: GlowEffect[] = [];
+    for (const glow of this.glows) {
+      const elapsed = now - glow.startTime;
+      if (elapsed >= GLOW_DURATION) continue;
+
+      aliveGlows.push(glow);
+      const progress = elapsed / GLOW_DURATION; // 0→1
+
+      // Convert world coords to screen coords
+      const sx = glow.wx - this.renderer.viewX;
+      const sy = glow.wy - this.renderer.viewY;
+
+      // Skip if off-screen
+      if (sx < -glow.radius || sx > w + glow.radius ||
+          sy < -glow.radius || sy > h + glow.radius) continue;
+
+      const alpha = (1 - progress) * 0.4; // fade from 0.4 to 0
+      const pulseRadius = glow.radius * (0.8 + progress * 0.4); // subtle pulse outward
+
+      const baseColor = POWER_FLASH_COLORS[glow.power] ?? POWER_FLASH_COLORS[0];
+      const glowColor = baseColor.replace(/[\d.]+\)$/, `${alpha.toFixed(3)})`);
+
+      // Radial gradient glow
+      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, pulseRadius);
+      grad.addColorStop(0, glowColor);
+      grad.addColorStop(0.6, glowColor.replace(/[\d.]+\)$/, `${(alpha * 0.4).toFixed(3)})`));
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, pulseRadius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+    this.glows = aliveGlows;
+
+    // Keep animating if there are active flashes or glows
+    if (this.flashes.length > 0 || this.glows.length > 0) {
       this.animating = true;
       requestAnimationFrame((t) => this.render(t));
     }

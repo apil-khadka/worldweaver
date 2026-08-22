@@ -24,6 +24,7 @@ const (
 // Client represents a single connected browser.
 type Client struct {
 	Player  *game.Player
+	WorldID string
 	hub     *Hub
 	conn    *websocket.Conn
 	send    chan []byte
@@ -35,6 +36,21 @@ func newClient(hub *Hub, conn *websocket.Conn) *Client {
 	p := game.NewPlayer()
 	c := &Client{
 		Player:  p,
+		WorldID: "genesis",
+		hub:     hub,
+		conn:    conn,
+		send:    make(chan []byte, writeQueueDepth),
+		limiter: NewClientRateLimiter(),
+	}
+	return c
+}
+
+// newClientWithIdentity constructs a Client with a pre-assigned player ID and nickname.
+func newClientWithIdentity(hub *Hub, conn *websocket.Conn, playerID uint32, nickname string, worldID string) *Client {
+	p := game.NewPlayerWithID(playerID, nickname)
+	c := &Client{
+		Player:  p,
+		WorldID: worldID,
 		hub:     hub,
 		conn:    conn,
 		send:    make(chan []byte, writeQueueDepth),

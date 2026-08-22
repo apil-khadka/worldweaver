@@ -25,16 +25,24 @@ type Hub struct {
 	engine      *simulation.Engine
 	metrics     *metrics.Metrics
 	connLimiter *ConnRateLimiter
+	Scoreboard  *game.Scoreboard
+	WorldName   string
+	auth        *game.AuthManager
+	worldMgr    *game.WorldManager
 }
 
 // NewHub creates a Hub wired to the given world and engine.
-func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics) *Hub {
+func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics, sb *game.Scoreboard, worldName string, auth *game.AuthManager, worldMgr *game.WorldManager) *Hub {
 	return &Hub{
 		clients:     make(map[*Client]struct{}),
 		world:       w,
 		engine:      eng,
 		metrics:     m,
 		connLimiter: NewConnRateLimiter(),
+		Scoreboard:  sb,
+		WorldName:   worldName,
+		auth:        auth,
+		worldMgr:    worldMgr,
 	}
 }
 
@@ -43,6 +51,7 @@ func (h *Hub) register(c *Client) {
 	h.clients[c] = struct{}{}
 	h.mu.Unlock()
 	h.metrics.PlayerCount.Add(1)
+	h.Scoreboard.PlayerConnected(h.WorldName, c.Player.ID)
 	log.Printf("hub: player %d registered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
 	h.BroadcastPlayerJoin(c.Player.ID)
 }
@@ -53,6 +62,7 @@ func (h *Hub) unregister(c *Client) {
 	h.mu.Unlock()
 	close(c.send)
 	h.metrics.PlayerCount.Add(-1)
+	h.Scoreboard.PlayerDisconnected(h.WorldName, c.Player.ID)
 	log.Printf("hub: player %d unregistered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
 	h.BroadcastPlayerLeave(c.Player.ID)
 }
@@ -84,6 +94,11 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 		Intensity: req.Intensity,
 	})
 
+	// Track scoring: estimate cells affected from radius
+	cellsAffected := estimateCellsInRadius(req.Radius)
+	cost := game.InfluenceCost[req.Power]
+	h.Scoreboard.RecordPowerAction(h.WorldName, c.Player.ID, req.Power, cellsAffected, cost)
+
 	// Immediately send updated influence state so the client UI stays in sync.
 	c.sendJSON(PlayerStateMsg{
 		Type:         MsgPlayerState,
@@ -91,6 +106,21 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 		Influence:    c.Player.Influence(),
 		MaxInfluence: 100,
 	})
+}
+
+// estimateCellsInRadius approximates the number of cells in a circular radius.
+func estimateCellsInRadius(radius int) int {
+	// Rough approximation: count cells in the circle
+	count := 0
+	r2 := radius * radius
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			if dx*dx+dy*dy <= r2 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // PlayerCount returns the current number of connected clients.

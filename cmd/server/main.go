@@ -74,7 +74,10 @@ func main() {
 	eng := simulation.NewEngine(w, m)
 
 	// ── Network ──────────────────────────────────────────────────────────────
-	hub := network.NewHub(w, eng, m)
+	sb := game.NewScoreboard()
+	auth := game.NewAuthManager()
+	worldMgr := game.NewWorldManager(*seed, *worldW, *worldH)
+	hub := network.NewHub(w, eng, m, sb, "genesis", auth, worldMgr)
 
 	// Static file system — serves web/ directory
 	staticFS := http.Dir("web")
