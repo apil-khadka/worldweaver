@@ -144,3 +144,19 @@ func (h *Hub) BroadcastPlayerLeave(playerID uint32) {
 		c.sendRaw(msg)
 	}
 }
+
+// RegenerateAllInfluence ticks influence regen for all connected players
+// and sends updated state to each client.
+func (h *Hub) RegenerateAllInfluence() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.Player.RegenerateInfluence()
+		c.sendJSON(PlayerStateMsg{
+			Type:         MsgPlayerState,
+			PlayerID:     c.Player.ID,
+			Influence:    c.Player.Influence(),
+			MaxInfluence: 100,
+		})
+	}
+}

@@ -38,6 +38,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/worldweaver/worldweaver/internal/game"
 	"github.com/worldweaver/worldweaver/internal/metrics"
 	"github.com/worldweaver/worldweaver/internal/network"
 	"github.com/worldweaver/worldweaver/internal/persistence"
@@ -104,7 +105,10 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			snap := m.Snapshot()
-			hub.BroadcastMetrics(snap, 0, w.Tick)
+			stability := game.Compute(w)
+			hub.BroadcastMetrics(snap, stability.Overall, w.Tick)
+			// Regenerate influence for all connected players
+			hub.RegenerateAllInfluence()
 		}
 	}()
 
