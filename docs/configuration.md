@@ -115,3 +115,25 @@ CMD ["-addr", ":8080", "-snapdir", "/app/data"]
 | `/health` | GET | Health check (Docker/Dokploy readiness) |
 | `/ws` | GET | WebSocket upgrade for game clients |
 | `/api/metrics` | GET | Runtime metrics JSON |
+
+## Deployment Troubleshooting
+
+### Common Issues
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Branch Not Match` on webhook | Missing `X-GitHub-Event: push` header | GitHub Actions workflow sends it (see `.github/workflows/deploy.yml`) |
+| `docker buildx build requires 1 argument` | Empty Docker Context Path in Dokploy | Set Docker Context Path to `.` |
+| `go.mod requires go >= 1.27.0` | Base image Go version too old | Use `golang:1.24-alpine` + `GOTOOLCHAIN=auto` |
+| Container exits after ~27s | Healthcheck failing (Alpine IPv6 `localhost` → `::1`) | Use `nginx:stable` (Debian) + `curl -fs http://127.0.0.1:80/` |
+| `SSL_do_handshake() failed` on upstream | Cloudflare requires SNI for HTTPS proxy | Add `proxy_ssl_server_name on;` in nginx locations |
+| `host not found in upstream` | Backend hostname unresolvable | Set `BACKEND_URL` env var to reachable backend address |
+
+### Cloudflare + Nginx Proxy
+
+When proxying to a backend behind Cloudflare (shared IP), nginx must send the hostname in the TLS handshake (SNI). Without `proxy_ssl_server_name on;`, Cloudflare can't route the request and returns an SSL handshake failure.
+
+### Internal vs External Backend URL
+
+- **External** (through Cloudflare): `BACKEND_URL=https://worldweaverapi.apilkhadka.com.np` — works everywhere, requires `proxy_ssl_server_name on;`
+- **Internal** (same Docker network): `BACKEND_URL=http://<container-name>:8080` — faster, no SSL overhead, but requires both services on the same Docker network in Dokploy

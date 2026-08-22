@@ -3,6 +3,7 @@
 > **One World. Many Forces.**
 
 [![CI](https://github.com/apil-khadka/worldweaver/actions/workflows/ci.yml/badge.svg)](https://github.com/apil-khadka/worldweaver/actions/workflows/ci.yml)
+[![Deploy](https://github.com/apil-khadka/worldweaver/actions/workflows/deploy.yml/badge.svg)](https://github.com/apil-khadka/worldweaver/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 WorldWeaver is a real-time multiplayer emergent-world simulation built on a **server-authoritative architecture**.
