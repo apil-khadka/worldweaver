@@ -74,14 +74,22 @@ WebGL2 uploads material data as an R8UI texture. A GLSL fragment shader performs
 
 | Layer | Technology |
 |-------|------------|
-| Server | Go 1.22+ |
+| Server | Go 1.27 |
 | HTTP Router | go-chi/chi v5 |
 | WebSocket | coder/websocket |
 | Client | TypeScript + Vite |
 | Renderer | WebGL2 / WebGPU / Canvas2D |
 | Desktop/Mobile | Tauri v2 |
-| Container | Docker |
+| Container | Docker (multi-stage) |
 | CI/CD | GitHub Actions |
+| Hosting | Dokploy (self-hosted) |
+
+## Live Demo
+
+| Service | URL |
+|---------|-----|
+| Frontend (Game) | https://worldweaver.apilkhadka.com.np |
+| Backend (API) | https://worldweaverapi.apilkhadka.com.np |
 
 ## Quick Start
 
@@ -97,13 +105,33 @@ Open http://localhost:8080 in two browser tabs to see multiplayer.
 ### Docker
 
 ```bash
-docker build -t worldweaver .
-docker run -p 8080:8080 worldweaver
+# Run with docker-compose (both services)
+docker compose up --build
+
+# Or build individually
+docker build -f Dockerfile.backend -t worldweaver-backend .
+docker build -f Dockerfile.frontend -t worldweaver-frontend .
+docker run -p 8080:8080 worldweaver-backend
+docker run -p 80:80 -e BACKEND_URL=http://host.docker.internal:8080 worldweaver-frontend
 ```
+
+### Deployment (Dokploy)
+
+The project deploys as two separate services on [Dokploy](https://dokploy.com):
+
+| Service | Dockerfile | Port | Domain |
+|---------|------------|------|--------|
+| Backend | `Dockerfile.backend` | 8080 | worldweaverapi.apilkhadka.com.np |
+| Frontend | `Dockerfile.frontend` | 80 | worldweaver.apilkhadka.com.np |
+
+**Environment variables (Frontend):**
+- `BACKEND_URL` — Full URL to backend service (e.g. `https://worldweaverapi.apilkhadka.com.np`)
+
+CI/CD is handled by GitHub Actions (`.github/workflows/deploy.yml`) which triggers Dokploy webhooks on push to `main`.
 
 ## Development Setup
 
-Requirements: Go 1.22+, Node 20+
+Requirements: Go 1.27+, Node 20+
 
 ```bash
 # Backend
@@ -175,6 +203,11 @@ worldweaver/
 │   └── config/          Configuration + validation
 ├── web/                 TypeScript client
 │   └── src/render/      WebGL2 / WebGPU / Canvas2D
+├── Dockerfile.backend   Go server container
+├── Dockerfile.frontend  Vite + nginx container
+├── nginx.conf           Frontend reverse proxy config
+├── docker-compose.yml   Full-stack local deployment
+├── .github/workflows/   CI + Dokploy deploy
 ├── .kiro/               Steering, specs, hooks
 ├── docs/decisions/      ADR-001 through ADR-009
 ├── tests/               Acceptance tests

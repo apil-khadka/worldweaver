@@ -75,3 +75,43 @@ See `web/src/config/client-config.ts` for frontend configuration.
 | Renderer | preference: [webgpu, webgl2, canvas2d], scale: 1.0 |
 | Input | panSpeed: 8, powerRadius: 24, zoom: 0.25–8.0 |
 | Features | webgpu: on, canvas: on, waterAnim: on, fireAnim: on |
+
+## Deployment Configuration
+
+### Docker Environment Variables
+
+#### Backend (`Dockerfile.backend`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| TZ | UTC | Timezone for logging |
+
+CLI flags are passed via `CMD` in the Dockerfile:
+```bash
+CMD ["-addr", ":8080", "-snapdir", "/app/data"]
+```
+
+#### Frontend (`Dockerfile.frontend`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| BACKEND_URL | `http://worldweaver-backend:8080` | Backend service URL for nginx proxy |
+
+### Dokploy Setup
+
+| Service | Dockerfile | Docker Context | Port | Domain |
+|---------|------------|----------------|------|--------|
+| Backend | `Dockerfile.backend` | `.` | 8080 | worldweaverapi.apilkhadka.com.np |
+| Frontend | `Dockerfile.frontend` | `.` | 80 | worldweaver.apilkhadka.com.np |
+
+**Branch:** `main`
+**Auto-deploy:** Webhook triggered by GitHub Actions on push to main.
+
+### API Endpoints (Backend)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API info (name, version, status, endpoints) |
+| `/health` | GET | Health check (Docker/Dokploy readiness) |
+| `/ws` | GET | WebSocket upgrade for game clients |
+| `/api/metrics` | GET | Runtime metrics JSON |
