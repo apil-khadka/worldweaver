@@ -1,0 +1,7 @@
+#!/bin/sh
+# Automatically add Kiro co-author attribution to commits.
+# This shows in GitHub that the project was built with Kiro AI assistance.
+if ! grep -q "Co-authored-by: Kiro" "$1"; then
+  echo "" >> "$1"
+  echo "Co-authored-by: Kiro (AI) <kiro-dev@amazon.com>" >> "$1"
+fi
