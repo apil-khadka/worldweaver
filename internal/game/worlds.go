@@ -8,6 +8,67 @@ import (
 	"time"
 )
 
+// ── Dynamic World Scaling ────────────────────────────────────────────────────
+
+const (
+	BaseWidth  = 256
+	BaseHeight = 128
+	MaxPlayers = 8
+)
+
+// WorldSize calculates dimensions scaled by player capacity.
+// 2 players → 512x256, 4 → 1024x512, 8 → 2048x1024.
+func WorldSize(playerCap int) (width, height int) {
+	if playerCap < 1 {
+		playerCap = 1
+	}
+	if playerCap > MaxPlayers {
+		playerCap = MaxPlayers
+	}
+	return BaseWidth * playerCap, BaseHeight * playerCap
+}
+
+// ── Cooperative Goals ────────────────────────────────────────────────────────
+
+// GoalType identifies a cooperative goal.
+type GoalType int
+
+const (
+	GoalStability GoalType = iota
+	GoalGrowPlants
+	GoalExtinguishFires
+	GoalCreateLake
+)
+
+// GoalDefinition describes a cooperative goal template.
+type GoalDefinition struct {
+	Type   GoalType
+	Text   string
+	Target int
+}
+
+// GoalRotation is the set of goals that rotate every 5 minutes.
+var GoalRotation = []GoalDefinition{
+	{Type: GoalStability, Text: "Raise stability above 80%", Target: 80},
+	{Type: GoalGrowPlants, Text: "Grow 500 plants", Target: 500},
+	{Type: GoalExtinguishFires, Text: "Extinguish all fires", Target: 0},
+	{Type: GoalCreateLake, Text: "Create a lake (1000+ water cells connected)", Target: 1000},
+}
+
+// GoalRotationInterval is how often goals rotate.
+const GoalRotationInterval = 5 * time.Minute
+
+// GoalState tracks the current cooperative goal for a world.
+type GoalState struct {
+	Definition GoalDefinition `json:"definition"`
+	Progress   int            `json:"progress"`
+	Completed  bool           `json:"completed"`
+	StartedAt  time.Time      `json:"startedAt"`
+	Index      int            `json:"index"` // position in GoalRotation
+}
+
+// ── World Info & Instance ────────────────────────────────────────────────────
+
 // WorldInfo holds metadata about a running world instance.
 type WorldInfo struct {
 	ID          string    `json:"id"`
@@ -18,13 +79,16 @@ type WorldInfo struct {
 	CreatorName string    `json:"creatorName"`
 	CreatedAt   time.Time `json:"createdAt"`
 	PlayerCount int       `json:"playerCount"`
+	MaxPlayers  int       `json:"maxPlayers"`
 }
 
-// WorldInstance holds a world's metadata plus a reference to its hub ID.
-// The actual simulation/hub state is managed externally — this is just the registry.
+// WorldInstance holds a world's metadata plus cooperative goal state.
 type WorldInstance struct {
 	Info WorldInfo
+	Goal GoalState
 }
+
+// ── World Manager ────────────────────────────────────────────────────────────
 
 // WorldManager manages multiple world instances.
 // Thread-safe for concurrent access from HTTP handlers.
@@ -49,6 +113,12 @@ func NewWorldManager(defaultSeed int64, defaultW, defaultH int) *WorldManager {
 			Height:      defaultH,
 			CreatorName: "system",
 			CreatedAt:   time.Now(),
+			MaxPlayers:  MaxPlayers,
+		},
+		Goal: GoalState{
+			Definition: GoalRotation[0],
+			StartedAt:  time.Now(),
+			Index:      0,
 		},
 	}
 
@@ -56,18 +126,19 @@ func NewWorldManager(defaultSeed int64, defaultW, defaultH int) *WorldManager {
 }
 
 // CreateWorld creates a new world and returns its info.
-// Returns an error if the name is empty or already exists.
-func (wm *WorldManager) CreateWorld(name string, seed int64, width, height int, creatorName string) (*WorldInfo, error) {
+// playerCap is clamped to [1, MaxPlayers]; dimensions are computed from it.
+func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, creatorName string) (*WorldInfo, error) {
 	if name == "" {
 		return nil, fmt.Errorf("world name cannot be empty")
 	}
-	if width <= 0 || width > 4096 {
-		width = 1024
+	if playerCap < 1 {
+		playerCap = MaxPlayers
 	}
-	if height <= 0 || height > 2048 {
-		height = 512
+	if playerCap > MaxPlayers {
+		playerCap = MaxPlayers
 	}
 
+	width, height := WorldSize(playerCap)
 	id := generateWorldID()
 
 	wm.mu.Lock()
@@ -82,6 +153,12 @@ func (wm *WorldManager) CreateWorld(name string, seed int64, width, height int, 
 			Height:      height,
 			CreatorName: creatorName,
 			CreatedAt:   time.Now(),
+			MaxPlayers:  playerCap,
+		},
+		Goal: GoalState{
+			Definition: GoalRotation[0],
+			StartedAt:  time.Now(),
+			Index:      0,
 		},
 	}
 	wm.worlds[id] = instance
@@ -89,7 +166,6 @@ func (wm *WorldManager) CreateWorld(name string, seed int64, width, height int, 
 }
 
 // DeleteWorld removes a world by ID. Only the creator (or system) can delete.
-// Returns an error if not found or unauthorized.
 func (wm *WorldManager) DeleteWorld(id string, requesterName string) error {
 	if id == "genesis" {
 		return fmt.Errorf("cannot delete the default world")
@@ -134,6 +210,26 @@ func (wm *WorldManager) GetWorld(id string) *WorldInfo {
 	return nil
 }
 
+// IsFull returns true if a world has reached its player cap.
+func (wm *WorldManager) IsFull(id string) bool {
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	if w, ok := wm.worlds[id]; ok {
+		return w.Info.PlayerCount >= w.Info.MaxPlayers
+	}
+	return false
+}
+
+// GetMaxPlayers returns the player cap for a world (0 if not found).
+func (wm *WorldManager) GetMaxPlayers(id string) int {
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	if w, ok := wm.worlds[id]; ok {
+		return w.Info.MaxPlayers
+	}
+	return 0
+}
+
 // SetPlayerCount updates the player count for a world.
 func (wm *WorldManager) SetPlayerCount(id string, count int) {
 	wm.mu.Lock()
@@ -150,6 +246,86 @@ func (wm *WorldManager) Exists(id string) bool {
 	_, ok := wm.worlds[id]
 	return ok
 }
+
+// ── Goal Management ──────────────────────────────────────────────────────────
+
+// GetGoalState returns the current goal state for a world.
+func (wm *WorldManager) GetGoalState(id string) *GoalState {
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	if w, ok := wm.worlds[id]; ok {
+		g := w.Goal
+		return &g
+	}
+	return nil
+}
+
+// UpdateGoalProgress sets the progress for the current goal.
+// Returns true if the goal was JUST completed (transition to completed).
+func (wm *WorldManager) UpdateGoalProgress(id string, progress int) bool {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	w, ok := wm.worlds[id]
+	if !ok {
+		return false
+	}
+	if w.Goal.Completed {
+		return false
+	}
+	w.Goal.Progress = progress
+
+	// Check completion based on goal type
+	switch w.Goal.Definition.Type {
+	case GoalStability:
+		if progress >= w.Goal.Definition.Target {
+			w.Goal.Completed = true
+			return true
+		}
+	case GoalGrowPlants:
+		if progress >= w.Goal.Definition.Target {
+			w.Goal.Completed = true
+			return true
+		}
+	case GoalExtinguishFires:
+		// Target is 0 fires — completed when progress (fire count) == 0
+		if progress == 0 {
+			w.Goal.Completed = true
+			return true
+		}
+	case GoalCreateLake:
+		if progress >= w.Goal.Definition.Target {
+			w.Goal.Completed = true
+			return true
+		}
+	}
+	return false
+}
+
+// RotateGoalIfDue checks if the current goal has expired and rotates.
+// Returns true if a rotation happened.
+func (wm *WorldManager) RotateGoalIfDue(id string) bool {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	w, ok := wm.worlds[id]
+	if !ok {
+		return false
+	}
+
+	if time.Since(w.Goal.StartedAt) < GoalRotationInterval {
+		return false
+	}
+
+	// Rotate to next goal
+	nextIdx := (w.Goal.Index + 1) % len(GoalRotation)
+	w.Goal = GoalState{
+		Definition: GoalRotation[nextIdx],
+		StartedAt:  time.Now(),
+		Index:      nextIdx,
+	}
+	return true
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 func generateWorldID() string {
 	b := make([]byte, 8)

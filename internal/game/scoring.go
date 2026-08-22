@@ -118,6 +118,14 @@ func (sb *Scoreboard) UpdateStability(worldName string, playerID uint32, delta f
 	ps.Score = ps.ComputeScore()
 }
 
+// RecordGoalBonus adds bonus points from completing a cooperative goal.
+func (sb *Scoreboard) RecordGoalBonus(worldName string, playerID uint32, bonus int) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	ps := sb.getOrCreate(worldName, playerID)
+	ps.Score += bonus
+}
+
 // TopScores returns the top N players for the given world, sorted by score descending.
 func (sb *Scoreboard) TopScores(worldName string, n int) []PlayerScore {
 	sb.mu.RLock()

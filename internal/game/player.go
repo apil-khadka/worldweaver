@@ -116,3 +116,23 @@ func (p *Player) Power() uint8 {
 	defer p.mu.RUnlock()
 	return p.power
 }
+
+// CursorPos returns the center of the player's viewport as an approximation
+// of their cursor position (used for chat bubble placement).
+func (p *Player) CursorPos() (int, int) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	cx := int(p.cameraX) + int(p.viewW)/2
+	cy := int(p.cameraY) + int(p.viewH)/2
+	return cx, cy
+}
+
+// AddBonusInfluence adds bonus influence from goal completion, temporarily boosting the cap.
+func (p *Player) AddBonusInfluence(amount float32) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.influence += amount
+	if p.influence > 200 {
+		p.influence = 200
+	}
+}

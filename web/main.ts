@@ -20,11 +20,14 @@ import { WorldNetwork, type IGameRenderer } from "./network.js";
 import { WorldRenderer, type FullSnapshot } from "./renderer.js";
 import { WebGL2WorldRenderer, isWebGL2Available } from "./webgl2-renderer.js";
 import { IsometricRenderer } from "./isometric-renderer.js";
+import { PixiWorldRenderer, isPixiAvailable } from "./pixi-renderer.js";
 import { InputHandler } from "./input.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
 import { Minimap } from "./minimap.js";
 import { AudioEngine } from "./audio.js";
+import { ChatSystem } from "./chat.js";
+import { SocialSystem } from "./social.js";
 
 // ── Lobby ──────────────────────────────────────────────────────────────────
 const lobby = new Lobby();
@@ -41,27 +44,24 @@ async function main() {
   const wrapper = document.getElementById("canvas-wrapper") as HTMLDivElement;
   const overlayCanvas = document.getElementById("power-overlay") as HTMLCanvasElement;
 
-  // ── Create initial renderer (default: isometric 2.5D) ──────────────────
-  const renderer = (() => {
-    if (isWebGL2Available()) {
-      try {
-        const iso = new IsometricRenderer(canvas);
-        console.info("[main] using Isometric 2.5D renderer (WebGL2)");
-        return iso;
-      } catch (e) {
-        console.warn("[main] Isometric renderer failed, trying flat WebGL2:", e);
-        try {
-          const gl2 = new WebGL2WorldRenderer(canvas);
-          console.info("[main] using WebGL2 renderer (GPU-accelerated)");
-          return gl2;
-        } catch (e2) {
-          console.warn("[main] WebGL2 init failed, falling back to Canvas2D:", e2);
-        }
-      }
+  // ── Create initial renderer (default: PixiJS 8) ──────────────────────────
+  let renderer: IGameRenderer;
+  let pixiRenderer: PixiWorldRenderer | null = null;
+
+  if (isPixiAvailable()) {
+    try {
+      const pixi = new PixiWorldRenderer(canvas);
+      await pixi.init();
+      pixiRenderer = pixi;
+      renderer = pixi;
+      console.info("[main] using PixiJS 8 renderer (GPU-accelerated)");
+    } catch (e) {
+      console.warn("[main] PixiJS init failed, trying fallbacks:", e);
+      renderer = createFallbackRenderer(canvas);
     }
-    console.info("[main] using Canvas2D renderer (fallback)");
-    return new WorldRenderer(canvas);
-  })();
+  } else {
+    renderer = createFallbackRenderer(canvas);
+  }
 
   // Track which renderer is active (can be swapped by the view toggle)
   let activeRenderer: IGameRenderer = renderer;
@@ -92,6 +92,25 @@ async function main() {
   ui.attach();
   effects.attach();
   minimap.start();
+
+  // ── Social systems (chat, pings, emotes, combos) ─────────────────────────
+  const gameContainerEl = document.getElementById("game-container")!;
+  const chat = new ChatSystem(network, renderer, gameContainerEl);
+  const social = new SocialSystem(network, renderer, canvas, gameContainerEl);
+
+  // Wire social network callbacks
+  network.callbacks.onChat = (playerID, nickname, text, x, y) => {
+    chat.onChatMessage(playerID, nickname, text, x, y);
+  };
+  network.callbacks.onPingLocation = (playerID, x, y) => {
+    social.onPingLocation(playerID, x, y);
+  };
+  network.callbacks.onEmote = (playerID, emote, x, y) => {
+    social.onEmote(playerID, emote, x, y);
+  };
+  network.callbacks.onCombo = (playerIDs, powers, x, y) => {
+    social.onCombo(playerIDs, powers, x, y);
+  };
 
   // ── Audio Engine ─────────────────────────────────────────────────────────
   const audio = AudioEngine.getInstance();
@@ -150,10 +169,16 @@ async function main() {
   };
 
   // ── View mode toggle (2D ↔ 2.5D) ──────────────────────────────────────
+  // The PixiJS renderer is the flat 2D path and cannot be swapped synchronously
+  // (it requires async init), so the 2D↔2.5D toggle is only wired for the
+  // legacy WebGL2/Isometric renderers used as fallbacks.
   let viewMode: "2.5D" | "2D" = renderer instanceof IsometricRenderer ? "2.5D" : "2D";
 
   const viewToggle = document.getElementById("view-toggle") as HTMLButtonElement | null;
-  if (viewToggle) {
+  if (viewToggle && pixiRenderer) {
+    // PixiJS active: hide the legacy view toggle
+    viewToggle.style.display = "none";
+  } else if (viewToggle) {
     viewToggle.textContent = viewMode === "2.5D" ? "◆ 2.5D" : "▦ 2D";
     viewToggle.addEventListener("click", () => {
       if (viewMode === "2.5D") {
@@ -242,6 +267,28 @@ async function main() {
 
     audio.updateAmbient(fireCount / total, waterCount / total);
   }, 250);
+}
+
+/** Create a non-PixiJS fallback renderer (WebGL2 → Canvas2D cascade). */
+function createFallbackRenderer(canvas: HTMLCanvasElement): IGameRenderer {
+  if (isWebGL2Available()) {
+    try {
+      const iso = new IsometricRenderer(canvas);
+      console.info("[main] using Isometric 2.5D renderer (WebGL2 fallback)");
+      return iso;
+    } catch (e) {
+      console.warn("[main] Isometric failed, trying flat WebGL2:", e);
+      try {
+        const gl2 = new WebGL2WorldRenderer(canvas);
+        console.info("[main] using WebGL2 renderer (fallback)");
+        return gl2;
+      } catch (e2) {
+        console.warn("[main] WebGL2 init failed, falling back to Canvas2D:", e2);
+      }
+    }
+  }
+  console.info("[main] using Canvas2D renderer (final fallback)");
+  return new WorldRenderer(canvas);
 }
 
 /** Transfer world state and camera from one renderer to another. */

@@ -2,6 +2,7 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -139,10 +140,9 @@ func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name   string `json:"name"`
-		Seed   int64  `json:"seed"`
-		Width  int    `json:"width"`
-		Height int    `json:"height"`
+		Name       string `json:"name"`
+		Seed       int64  `json:"seed"`
+		MaxPlayers int    `json:"maxPlayers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
@@ -152,8 +152,11 @@ func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
 		return
 	}
+	if req.MaxPlayers < 1 || req.MaxPlayers > game.MaxPlayers {
+		req.MaxPlayers = game.MaxPlayers
+	}
 
-	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.Width, req.Height, creatorName)
+	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.MaxPlayers, creatorName)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -213,6 +216,21 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Validate world exists
 	if !h.worldMgr.Exists(worldID) {
 		http.Error(w, `{"error":"world not found"}`, http.StatusNotFound)
+		return
+	}
+
+	// Check player cap — reject if world is full
+	if h.worldMgr.IsFull(worldID) {
+		maxP := h.worldMgr.GetMaxPlayers(worldID)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return
+		}
+		msg := fmt.Sprintf(`{"type":"error","message":"World full (%d/%d players)"}`, maxP, maxP)
+		conn.Write(r.Context(), websocket.MessageText, []byte(msg))
+		conn.Close(4001, "world full")
 		return
 	}
 

@@ -112,6 +112,8 @@ func main() {
 			hub.BroadcastMetrics(snap, stability.Overall, w.Tick)
 			// Regenerate influence for all connected players
 			hub.RegenerateAllInfluence()
+			// Tick cooperative goals (check progress, rotate if due)
+			hub.TickGoals(stability.Overall)
 		}
 	}()
 

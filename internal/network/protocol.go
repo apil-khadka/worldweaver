@@ -26,11 +26,14 @@ package network
 
 // Inbound message types (client → server)
 const (
-	MsgHello      = "hello"
-	MsgPowerInput = "power"
-	MsgViewport   = "viewport"
-	MsgPing       = "ping"
-	MsgCursor     = "cursor"
+	MsgHello        = "hello"
+	MsgPowerInput   = "power"
+	MsgViewport     = "viewport"
+	MsgPing         = "ping"
+	MsgCursor       = "cursor"
+	MsgChat         = "chat"
+	MsgPingLocation = "ping_location"
+	MsgEmote        = "emote"
 )
 
 // Outbound message types (server → client)
@@ -45,6 +48,11 @@ const (
 	MsgCursorUpdate  = "cursor_update"
 	MsgPlayerJoin    = "player_join"
 	MsgPlayerLeave   = "player_leave"
+	MsgChatBroadcast = "chat"
+	MsgPingBroadcast = "ping_location"
+	MsgEmoteBroadcast = "emote"
+	MsgCombo         = "combo"
+	MsgGoalUpdate    = "goal_update"
 )
 
 // ---- Inbound message structs ----
@@ -176,4 +184,72 @@ type PlayerJoinMsg struct {
 type PlayerLeaveMsg struct {
 	Type     string `json:"type"`
 	PlayerID uint32 `json:"playerID"`
+}
+
+// ---- Social / Chat messages ----
+
+// ChatInboundMsg is sent by a client to broadcast a text message.
+type ChatInboundMsg struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// ChatBroadcastMsg is broadcast to all clients in the same world.
+type ChatBroadcastMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+	Nickname string `json:"nickname"`
+	Text     string `json:"text"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+}
+
+// PingLocationInboundMsg is sent when a player pings a world location.
+type PingLocationInboundMsg struct {
+	Type string `json:"type"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+}
+
+// PingLocationBroadcastMsg is broadcast to all clients showing a location ping.
+type PingLocationBroadcastMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+}
+
+// EmoteInboundMsg is sent when a player emotes.
+type EmoteInboundMsg struct {
+	Type  string `json:"type"`
+	Emote string `json:"emote"`
+}
+
+// EmoteBroadcastMsg is broadcast to all clients showing an emote.
+type EmoteBroadcastMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+	Emote    string `json:"emote"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+}
+
+// ComboBroadcastMsg is broadcast when 2+ players apply different powers near each other.
+type ComboBroadcastMsg struct {
+	Type      string   `json:"type"`
+	PlayerIDs []uint32 `json:"playerIDs"`
+	Powers    []uint8  `json:"powers"`
+	X         int      `json:"x"`
+	Y         int      `json:"y"`
+}
+
+// ---- Goal messages ----
+
+// GoalUpdateMsg is broadcast to all clients when the cooperative goal state changes.
+type GoalUpdateMsg struct {
+	Type      string `json:"type"`
+	GoalText  string `json:"goalText"`
+	Progress  int    `json:"progress"`
+	Target    int    `json:"target"`
+	Completed bool   `json:"completed"`
 }

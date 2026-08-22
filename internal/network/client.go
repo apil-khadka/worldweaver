@@ -140,6 +140,30 @@ func (c *Client) readPump(ctx context.Context) {
 				c.hub.handleCursorMove(c, &msg)
 			}
 
+		case MsgChat:
+			var msg ChatInboundMsg
+			if err := json.Unmarshal(data, &msg); err != nil {
+				c.sendError("malformed chat message")
+				continue
+			}
+			c.hub.handleChat(c, &msg)
+
+		case MsgPingLocation:
+			var msg PingLocationInboundMsg
+			if err := json.Unmarshal(data, &msg); err != nil {
+				c.sendError("malformed ping message")
+				continue
+			}
+			c.hub.handlePingLocation(c, &msg)
+
+		case MsgEmote:
+			var msg EmoteInboundMsg
+			if err := json.Unmarshal(data, &msg); err != nil {
+				c.sendError("malformed emote message")
+				continue
+			}
+			c.hub.handleEmote(c, &msg)
+
 		default:
 			c.sendError("unknown message type")
 		}

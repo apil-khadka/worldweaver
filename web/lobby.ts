@@ -14,6 +14,7 @@ export interface WorldInfo {
   creatorName: string;
   createdAt:   string;
   playerCount: number;
+  maxPlayers:  number;
 }
 
 export interface LoginResult {
@@ -142,8 +143,10 @@ export class Lobby {
           <span class="lobby-world-name">${this.escapeHtml(w.name)}</span>
           <span class="lobby-world-meta">${w.width}×${w.height} · seed ${w.seed} · by ${this.escapeHtml(w.creatorName)}</span>
         </div>
-        <div class="lobby-world-players">${w.playerCount} 🟢</div>
-        <button class="lobby-join-btn" data-world-id="${w.id}">Join</button>
+        <div class="lobby-world-players">${w.playerCount}/${w.maxPlayers} players</div>
+        <button class="lobby-join-btn" data-world-id="${w.id}"${w.playerCount >= w.maxPlayers ? ' disabled' : ''}>
+          ${w.playerCount >= w.maxPlayers ? 'Full' : 'Join'}
+        </button>
       `;
       row.querySelector(".lobby-join-btn")!.addEventListener("click", () => this.joinWorld(w.id));
       this.worldList.appendChild(row);
@@ -170,6 +173,7 @@ export class Lobby {
   private async createWorld(): Promise<void> {
     const nameInput = document.getElementById("lobby-create-name") as HTMLInputElement;
     const seedInput = document.getElementById("lobby-create-seed") as HTMLInputElement;
+    const maxPlayersInput = document.getElementById("lobby-create-maxplayers") as HTMLInputElement;
     const name = nameInput.value.trim();
     if (!name) {
       this.setStatus("World name required", true);
@@ -181,6 +185,7 @@ export class Lobby {
     if (!ok) return;
 
     const seed = parseInt(seedInput.value) || Math.floor(Math.random() * 999999);
+    const maxPlayers = Math.min(8, Math.max(1, parseInt(maxPlayersInput?.value) || 8));
 
     try {
       const resp = await fetch("/api/worlds", {
@@ -189,7 +194,7 @@ export class Lobby {
           "Content-Type": "application/json",
           "Authorization": this.token,
         },
-        body: JSON.stringify({ name, seed, width: 1024, height: 512 }),
+        body: JSON.stringify({ name, seed, maxPlayers }),
       });
       if (!resp.ok) {
         const err = await resp.json();
@@ -200,6 +205,7 @@ export class Lobby {
       this.createPanel.classList.remove("visible");
       nameInput.value = "";
       seedInput.value = "";
+      if (maxPlayersInput) maxPlayersInput.value = "8";
       await this.loadWorlds();
     } catch {
       this.setStatus("Connection error", true);

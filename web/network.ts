@@ -69,6 +69,10 @@ export interface NetworkCallbacks {
   onCursorUpdate?(cursor: RemoteCursor): void;
   onPlayerJoin?(playerID: number): void;
   onPlayerLeave?(playerID: number): void;
+  onChat?(playerID: number, nickname: string, text: string, x: number, y: number): void;
+  onPingLocation?(playerID: number, x: number, y: number): void;
+  onEmote?(playerID: number, emote: string, x: number, y: number): void;
+  onCombo?(playerIDs: number[], powers: number[], x: number, y: number): void;
 }
 
 export class WorldNetwork {
@@ -222,6 +226,42 @@ export class WorldNetwork {
         this.callbacks.onPlayerLeave?.(msg["playerID"] as number);
         break;
 
+      case "chat":
+        this.callbacks.onChat?.(
+          msg["playerID"] as number,
+          msg["nickname"] as string,
+          msg["text"] as string,
+          msg["x"] as number,
+          msg["y"] as number,
+        );
+        break;
+
+      case "ping_location":
+        this.callbacks.onPingLocation?.(
+          msg["playerID"] as number,
+          msg["x"] as number,
+          msg["y"] as number,
+        );
+        break;
+
+      case "emote":
+        this.callbacks.onEmote?.(
+          msg["playerID"] as number,
+          msg["emote"] as string,
+          msg["x"] as number,
+          msg["y"] as number,
+        );
+        break;
+
+      case "combo":
+        this.callbacks.onCombo?.(
+          msg["playerIDs"] as number[],
+          msg["powers"] as number[],
+          msg["x"] as number,
+          msg["y"] as number,
+        );
+        break;
+
       case "error":
         console.warn("[network] server error:", msg["message"]);
         this.callbacks.onError?.(msg["message"] as string);
@@ -255,6 +295,21 @@ export class WorldNetwork {
   /** Send cursor position to server for multiplayer presence (throttled externally). */
   sendCursor(x: number, y: number, power: number): void {
     this.send({ type: "cursor", x: Math.round(x), y: Math.round(y), power });
+  }
+
+  /** Send a chat message. */
+  sendChat(text: string): void {
+    this.send({ type: "chat", text: text.slice(0, 50) });
+  }
+
+  /** Send a location ping. */
+  sendPingLocation(x: number, y: number): void {
+    this.send({ type: "ping_location", x: Math.round(x), y: Math.round(y) });
+  }
+
+  /** Send an emote. */
+  sendEmote(emote: string): void {
+    this.send({ type: "emote", emote });
   }
 
   private send(msg: unknown): void {
