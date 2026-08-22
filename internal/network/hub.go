@@ -123,15 +123,23 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 	cost := game.InfluenceCost[req.Power]
 	h.Scoreboard.RecordPowerAction(h.WorldName, c.Player.ID, req.Power, cellsAffected, cost)
 
+	// Update player score/level from scoreboard
+	if ps := h.Scoreboard.GetPlayerScore(h.WorldName, c.Player.ID); ps != nil {
+		c.Player.UpdateScore(ps.Score)
+	}
+
 	// Check for power combos with other recent applications
 	h.RecordPowerForCombo(c.Player.ID, req.Power, req.X, req.Y)
 
 	// Immediately send updated influence state so the client UI stays in sync.
 	c.sendJSON(PlayerStateMsg{
-		Type:         MsgPlayerState,
-		PlayerID:     c.Player.ID,
-		Influence:    c.Player.Influence(),
-		MaxInfluence: 100,
+		Type:           MsgPlayerState,
+		PlayerID:       c.Player.ID,
+		Influence:      c.Player.Influence(),
+		MaxInfluence:   c.Player.MaxInfluenceCap(),
+		Level:          c.Player.Level(),
+		Score:          c.Player.Score(),
+		NextLevelScore: c.Player.NextLevelScore(),
 	})
 }
 
@@ -210,10 +218,13 @@ func (h *Hub) RegenerateAllInfluence() {
 	for c := range h.clients {
 		c.Player.RegenerateInfluence()
 		c.sendJSON(PlayerStateMsg{
-			Type:         MsgPlayerState,
-			PlayerID:     c.Player.ID,
-			Influence:    c.Player.Influence(),
-			MaxInfluence: 100,
+			Type:           MsgPlayerState,
+			PlayerID:       c.Player.ID,
+			Influence:      c.Player.Influence(),
+			MaxInfluence:   c.Player.MaxInfluenceCap(),
+			Level:          c.Player.Level(),
+			Score:          c.Player.Score(),
+			NextLevelScore: c.Player.NextLevelScore(),
 		})
 	}
 }
@@ -491,12 +502,19 @@ func (h *Hub) awardGoalBonus() {
 		c.Player.AddBonusInfluence(50)
 		// Record score bonus
 		h.Scoreboard.RecordGoalBonus(h.WorldName, c.Player.ID, 100)
+		// Update player score/level
+		if ps := h.Scoreboard.GetPlayerScore(h.WorldName, c.Player.ID); ps != nil {
+			c.Player.UpdateScore(ps.Score)
+		}
 		// Notify client
 		c.sendJSON(PlayerStateMsg{
-			Type:         MsgPlayerState,
-			PlayerID:     c.Player.ID,
-			Influence:    c.Player.Influence(),
-			MaxInfluence: 200, // Temporarily boosted
+			Type:           MsgPlayerState,
+			PlayerID:       c.Player.ID,
+			Influence:      c.Player.Influence(),
+			MaxInfluence:   c.Player.MaxInfluenceCap(),
+			Level:          c.Player.Level(),
+			Score:          c.Player.Score(),
+			NextLevelScore: c.Player.NextLevelScore(),
 		})
 	}
 }

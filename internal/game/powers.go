@@ -21,6 +21,11 @@ func (r *PowerRequest) Validate(p *Player, worldW, worldH int) error {
 		return errors.New("unknown power")
 	}
 
+	// Check level-gated powers
+	if !p.CanUsePower(r.Power) {
+		return errors.New("power locked: level too low")
+	}
+
 	// Coordinates must be inside world
 	if r.X < 0 || r.X >= worldW || r.Y < 0 || r.Y >= worldH {
 		return errors.New("coordinates out of bounds")

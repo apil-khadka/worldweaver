@@ -11,6 +11,7 @@ var InfluenceCost = map[uint8]float32{
 	PowerHeat:   3.0 / 60, // 3 influence/sec → 0.050/tick
 	PowerWind:   1.0 / 60, // 1 influence/sec → 0.017/tick
 	PowerGrowth: 4.0 / 60, // 4 influence/sec → 0.067/tick
+	PowerLife:   5.0 / 60, // 5 influence/sec → 0.083/tick (Level 4 unlock)
 }
 
 // Defined power IDs must match simulation.PowerType.
@@ -19,6 +20,7 @@ const (
 	PowerHeat   uint8 = 1
 	PowerWind   uint8 = 2
 	PowerGrowth uint8 = 3
+	PowerLife   uint8 = 4 // Level 4 unlock — spawns creatures
 )
 
 // PowerName returns a human-readable power name for the given ID.
@@ -32,6 +34,8 @@ func PowerName(p uint8) string {
 		return "wind"
 	case PowerGrowth:
 		return "growth"
+	case PowerLife:
+		return "life"
 	default:
 		return "unknown"
 	}

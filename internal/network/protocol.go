@@ -130,10 +130,13 @@ type ChunkUpdateMsg struct {
 
 // PlayerStateMsg carries the player's current game-layer state.
 type PlayerStateMsg struct {
-	Type      string  `json:"type"`
-	PlayerID  uint32  `json:"playerID"`
-	Influence float32 `json:"influence"`
-	MaxInfluence float32 `json:"maxInfluence"`
+	Type           string  `json:"type"`
+	PlayerID       uint32  `json:"playerID"`
+	Influence      float32 `json:"influence"`
+	MaxInfluence   float32 `json:"maxInfluence"`
+	Level          int     `json:"level"`
+	Score          int     `json:"score"`
+	NextLevelScore int     `json:"nextLevelScore"`
 }
 
 // WorldMetricsMsg carries live performance/game telemetry.

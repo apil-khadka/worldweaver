@@ -95,6 +95,8 @@ func (sb *Scoreboard) RecordPowerAction(worldName string, playerID uint32, power
 		ps.FiresStarted += cellsAffected
 	case PowerGrowth:
 		ps.CreaturesSpawned += cellsAffected
+	case PowerLife:
+		ps.CreaturesSpawned += cellsAffected * 2 // Life is stronger creature spawning
 	}
 
 	ps.Score = ps.ComputeScore()
