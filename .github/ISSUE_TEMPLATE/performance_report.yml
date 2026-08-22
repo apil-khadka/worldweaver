@@ -1,0 +1,31 @@
+name: Performance Report
+description: Report a performance issue
+labels: [performance]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: WorldWeaver version
+    validations:
+      required: true
+  - type: input
+    id: world_size
+    attributes:
+      label: World size
+      placeholder: e.g. 1024x512
+    validations:
+      required: true
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Renderer
+      options:
+        - WebGL2
+        - WebGPU
+        - Canvas2D
+  - type: textarea
+    id: details
+    attributes:
+      label: Details (TPS, FPS, hardware)
+    validations:
+      required: true
