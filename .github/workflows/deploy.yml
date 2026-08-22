@@ -5,24 +5,22 @@ on:
     branches: [main]
 
 jobs:
-  deploy-backend:
-    name: Deploy Backend
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Dokploy Backend Webhook
+      - name: Deploy Backend
         run: |
           curl -X POST "${{ secrets.DOKPLOY_BACKEND }}" \
             -H "Content-Type: application/json" \
-            -d '{"ref": "refs/heads/main", "branch": "main"}' \
+            -H "X-GitHub-Event: push" \
+            -d '{"ref":"refs/heads/main","repository":{"full_name":"apil-khadka/worldweaver"}}' \
             --fail --silent --show-error
 
-  deploy-frontend:
-    name: Deploy Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Dokploy Frontend Webhook
+      - name: Deploy Frontend
         run: |
           curl -X POST "${{ secrets.DOKPLOY_FRONTEND }}" \
             -H "Content-Type: application/json" \
-            -d '{"ref": "refs/heads/main", "branch": "main"}' \
+            -H "X-GitHub-Event: push" \
+            -d '{"ref":"refs/heads/main","repository":{"full_name":"apil-khadka/worldweaver"}}' \
             --fail --silent --show-error
