@@ -92,30 +92,28 @@ export class TauriPlatform implements PlatformAdapter {
   readonly platform: Platform = "tauri-desktop";
 
   async enterFullscreen(): Promise<void> {
-    const { getCurrent } = await import("@tauri-apps/api/window");
-    await getCurrent().setFullscreen(true);
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setFullscreen(true);
   }
 
   async exitFullscreen(): Promise<void> {
-    const { getCurrent } = await import("@tauri-apps/api/window");
-    await getCurrent().setFullscreen(false);
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setFullscreen(false);
   }
 
   async loadSettings(): Promise<ClientSettings> {
     try {
-      const { BaseDirectory, readTextFile } = await import("@tauri-apps/api/fs");
-      const raw = await readTextFile("settings.json", { dir: BaseDirectory.AppData });
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
+      // Tauri v2: fs plugin is a separate package, fallback to localStorage
+      const raw = localStorage.getItem("ww_settings");
+      if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    } catch { /* ignore */ }
+    return { ...DEFAULT_SETTINGS };
   }
 
   async saveSettings(settings: ClientSettings): Promise<void> {
-    const { BaseDirectory, writeTextFile } = await import("@tauri-apps/api/fs");
-    await writeTextFile("settings.json", JSON.stringify(settings, null, 2), {
-      dir: BaseDirectory.AppData,
-    });
+    try {
+      localStorage.setItem("ww_settings", JSON.stringify(settings));
+    } catch { /* ignore */ }
   }
 
   supportsNativeFeatures(): boolean { return true; }
