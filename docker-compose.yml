@@ -1,6 +1,8 @@
-# docker-compose.yml — WorldWeaver for Dokploy
-# Deploy both services in Dokploy's Docker Compose mode.
-# The frontend proxies /ws to the backend internally.
+# docker-compose.yml — WorldWeaver
+# Production deployment via Dokploy or any Docker host.
+# Usage: docker compose up -d
+# Frontend: http://localhost (landing + game at /play)
+# Backend:  http://localhost:8080 (direct, for debugging)
 
 services:
   worldweaver-backend:
@@ -13,8 +15,21 @@ services:
       - world-data:/app/data
     environment:
       - TZ=UTC
+      - WORLDWEAVER_ADDR=:8080
+      - WORLDWEAVER_WIDTH=2048
+      - WORLDWEAVER_HEIGHT=1024
+      - WORLDWEAVER_SEED=20260823
+      - WORLDWEAVER_MAX_PLAYERS=8
     expose:
       - "8080"
+    ports:
+      - "8080:8080"  # Direct backend access for debugging
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
     networks:
       - worldweaver
 
@@ -31,11 +46,18 @@ services:
     depends_on:
       worldweaver-backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
     networks:
       - worldweaver
 
 volumes:
   world-data:
+    driver: local
 
 networks:
   worldweaver:

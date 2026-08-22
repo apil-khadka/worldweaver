@@ -46,9 +46,12 @@ export interface MetricsData {
 }
 
 export interface PlayerState {
-  playerID:     number;
-  influence:    number;
-  maxInfluence: number;
+  playerID:       number;
+  influence:      number;
+  maxInfluence:   number;
+  level:          number;
+  score:          number;
+  nextLevelScore: number;
 }
 
 export interface RemoteCursor {
@@ -180,9 +183,12 @@ export class WorldNetwork {
 
       case "player_state": {
         const s: PlayerState = {
-          playerID:     msg["playerID"]     as number,
-          influence:    msg["influence"]    as number,
-          maxInfluence: msg["maxInfluence"] as number,
+          playerID:       msg["playerID"]       as number,
+          influence:      msg["influence"]      as number,
+          maxInfluence:   msg["maxInfluence"]   as number,
+          level:          msg["level"]          as number ?? 1,
+          score:          msg["score"]          as number ?? 0,
+          nextLevelScore: msg["nextLevelScore"] as number ?? 100,
         };
         this.influence    = s.influence;
         this.maxInfluence = s.maxInfluence;

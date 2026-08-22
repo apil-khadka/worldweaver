@@ -18,7 +18,7 @@ import { ClientPrediction } from "./prediction.js";
 import { AudioEngine } from "./audio.js";
 
 const POWER_KEYS: Record<string, number> = {
-  "1": 0, "2": 1, "3": 2, "4": 3,
+  "1": 0, "2": 1, "3": 2, "4": 3, "5": 4,
 };
 
 // ── Camera momentum constants ────────────────────────────────────────────────
@@ -92,6 +92,8 @@ export class InputHandler {
     // Power button clicks in the toolbar
     document.querySelectorAll<HTMLButtonElement>(".power-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
+        // Don't allow selecting locked powers
+        if (btn.classList.contains("power-locked")) return;
         const p = parseInt(btn.dataset["power"] ?? "0", 10);
         this.network.activePower = p;
         this.updatePowerButtons(p);
@@ -217,10 +219,11 @@ export class InputHandler {
     // Power selection
     if (e.key in POWER_KEYS) {
       const p = POWER_KEYS[e.key];
+      const btn = document.querySelector<HTMLButtonElement>(`.power-btn[data-power="${p}"]`);
+      // Don't allow selecting locked powers via keyboard
+      if (btn?.classList.contains("power-locked")) return;
       this.network.activePower = p;
       this.updatePowerButtons(p);
-      // Bounce the selected button
-      const btn = document.querySelector<HTMLButtonElement>(`.power-btn[data-power="${p}"]`);
       if (btn) this.bouncePowerButton(btn);
       return;
     }

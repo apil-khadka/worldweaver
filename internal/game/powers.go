@@ -31,9 +31,13 @@ func (r *PowerRequest) Validate(p *Player, worldW, worldH int) error {
 		return errors.New("coordinates out of bounds")
 	}
 
-	// Clamp radius
+	// Clamp radius (use player's level-based max radius)
+	maxR := p.PowerRadius()
 	if r.Radius < 1 {
 		r.Radius = 1
+	}
+	if r.Radius > maxR {
+		r.Radius = maxR
 	}
 	if r.Radius > MaxRadius {
 		r.Radius = MaxRadius

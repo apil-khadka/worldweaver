@@ -65,6 +65,14 @@ export class UIController {
   private elInfluenceTrack: HTMLElement | null = null;
   private influenceLow = false;
 
+  // ── Level progression state ────────────────────────────────────────────
+  private currentLevel = 1;
+  private elLevelValue: HTMLElement | null = null;
+  private elXpFill: HTMLElement | null = null;
+  private elXpText: HTMLElement | null = null;
+  private elLevelupOverlay: HTMLElement | null = null;
+  private elLevelupText: HTMLElement | null = null;
+
   constructor(private readonly network: WorldNetwork) {}
 
   attach(): void {
@@ -87,6 +95,16 @@ export class UIController {
 
     this.elInfluenceLowText = document.getElementById("influence-low-text");
     this.elInfluenceTrack = document.getElementById("influence-track");
+
+    // Level progression elements
+    this.elLevelValue = document.querySelector("#hdr-level b");
+    this.elXpFill = document.getElementById("xp-bar-fill");
+    this.elXpText = document.getElementById("xp-bar-text");
+    this.elLevelupOverlay = document.getElementById("levelup-overlay");
+    this.elLevelupText = document.getElementById("levelup-text");
+
+    // Initialize locked power button states
+    this.updateLockedPowers(1);
 
     this.network.callbacks = {
       onConnected:    () => this.onConnected(),
@@ -160,6 +178,80 @@ export class UIController {
         this.elInfluenceLowText?.classList.remove("visible");
       }
     }
+
+    // Level & XP bar
+    if (this.elLevelValue) {
+      this.elLevelValue.textContent = s.level.toString();
+    }
+    if (this.elXpFill && this.elXpText) {
+      if (s.nextLevelScore > 0) {
+        // Calculate XP progress within current level
+        const prevLevelScore = this.getLevelThreshold(s.level - 1);
+        const progress = s.score - prevLevelScore;
+        const needed = s.nextLevelScore - prevLevelScore;
+        const xpPct = Math.min(100, Math.max(0, (progress / needed) * 100));
+        this.elXpFill.style.width = `${xpPct}%`;
+        this.elXpText.textContent = `${s.score} / ${s.nextLevelScore}`;
+      } else {
+        // Max level
+        this.elXpFill.style.width = "100%";
+        this.elXpText.textContent = `${s.score} ★ MAX`;
+      }
+    }
+
+    // Level up detection
+    if (s.level > this.currentLevel && this.currentLevel > 0) {
+      this.showLevelUp(s.level);
+      this.updateLockedPowers(s.level);
+    }
+    this.currentLevel = s.level;
+  }
+
+  // Level score thresholds (mirrors server LevelThresholds)
+  private getLevelThreshold(level: number): number {
+    const thresholds = [0, 0, 100, 500, 2000, 10000];
+    return thresholds[level] ?? 0;
+  }
+
+  private showLevelUp(newLevel: number): void {
+    if (!this.elLevelupOverlay || !this.elLevelupText) return;
+
+    const unlockText: Record<number, string> = {
+      2: "Larger power radius unlocked!",
+      3: "Faster influence regen!",
+      4: "🐾 Life power unlocked!",
+      5: "Max influence increased to 150!",
+    };
+
+    this.elLevelupText.textContent = `Level ${newLevel} — ${unlockText[newLevel] ?? ""}`;
+    this.elLevelupOverlay.classList.add("visible");
+
+    // Play level-up sound via AudioEngine if available
+    try {
+      const audio = (window as any).__wwAudio;
+      if (audio?.playLevelUp) audio.playLevelUp();
+    } catch { /* ignore */ }
+
+    setTimeout(() => {
+      this.elLevelupOverlay?.classList.remove("visible");
+    }, 2200);
+  }
+
+  private updateLockedPowers(level: number): void {
+    const buttons = document.querySelectorAll<HTMLButtonElement>(".power-btn[data-unlock-level]");
+    buttons.forEach(btn => {
+      const requiredLevel = parseInt(btn.dataset["unlockLevel"] ?? "99", 10);
+      if (level >= requiredLevel) {
+        btn.classList.remove("power-locked");
+        btn.removeAttribute("data-lock-text");
+        // Brief unlock glow
+        btn.classList.add("power-unlocked");
+        setTimeout(() => btn.classList.remove("power-unlocked"), 1500);
+      } else {
+        btn.classList.add("power-locked");
+        btn.setAttribute("data-lock-text", `Lv. ${requiredLevel}`);
+      }
+    });
   }
 
   // ── Smooth Number Animation Loop ──────────────────────────────────────

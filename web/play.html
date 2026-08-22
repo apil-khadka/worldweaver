@@ -218,6 +218,119 @@
       text-align: right;
     }
 
+    /* ── Level & XP Bar ──────────────────────────────────── */
+    #hdr-level {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    #hdr-level b {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 13px;
+    }
+    #xp-bar-container {
+      position: relative;
+      width: 100px;
+      height: 14px;
+      background: var(--border);
+      border-radius: 7px;
+      overflow: hidden;
+      box-shadow: inset 0 1px 2px rgba(44, 24, 16, 0.08);
+    }
+    #xp-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #D4881A, #FFD700);
+      border-radius: 7px;
+      transition: width 0.5s ease;
+    }
+    #xp-bar-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      text-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+    }
+
+    /* ── Locked Powers ───────────────────────────────────── */
+    .power-btn.power-locked {
+      opacity: 0.4;
+      cursor: not-allowed;
+      filter: grayscale(0.8);
+      position: relative;
+    }
+    .power-btn.power-locked::after {
+      content: attr(data-lock-text);
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--danger);
+      background: rgba(253, 248, 240, 0.85);
+      border-radius: 100px;
+      pointer-events: none;
+    }
+    .power-btn.power-unlocked {
+      animation: power-unlock-glow 1.5s ease-out;
+    }
+    @keyframes power-unlock-glow {
+      0%   { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); }
+      50%  { box-shadow: 0 0 20px 4px rgba(255, 215, 0, 0.4); }
+      100% { box-shadow: none; }
+    }
+
+    /* ── Level Up Animation ──────────────────────────────── */
+    #levelup-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #levelup-overlay.visible {
+      display: flex;
+      animation: levelup-bg 2s ease-out forwards;
+    }
+    @keyframes levelup-bg {
+      0%   { background: rgba(255, 215, 0, 0.3); }
+      100% { background: transparent; }
+    }
+    .levelup-card {
+      text-align: center;
+      animation: levelup-pop 2s ease-out forwards;
+    }
+    @keyframes levelup-pop {
+      0%   { transform: scale(0.5); opacity: 0; }
+      15%  { transform: scale(1.2); opacity: 1; }
+      30%  { transform: scale(1); }
+      80%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-40px); }
+    }
+    .levelup-card .levelup-title {
+      font-size: 36px;
+      font-weight: 900;
+      color: #D4881A;
+      text-shadow: 0 2px 8px rgba(212, 136, 26, 0.4);
+      letter-spacing: 0.05em;
+    }
+    .levelup-card .levelup-subtitle {
+      font-size: 14px;
+      color: var(--text);
+      margin-top: 8px;
+      font-weight: 600;
+    }
+
     /* ── Canvas area ─────────────────────────────────────── */
     #canvas-wrapper {
       flex: 1;
@@ -917,6 +1030,11 @@
       <span>Stability: <b id="hdr-stability">–</b></span>
       <span>Players: <b id="hdr-players">–</b></span>
       <span><b id="hdr-nickname"></b></span>
+      <span id="hdr-level">Lv. <b>1</b></span>
+      <div id="xp-bar-container">
+        <div id="xp-bar-fill"></div>
+        <span id="xp-bar-text">0 / 100</span>
+      </div>
       <span id="connection-badge">⚪ Connecting…</span>
       <button id="shortcuts-btn" title="Keyboard shortcuts (?)">?</button>
     </div>
@@ -928,6 +1046,7 @@
     <button class="power-btn"        data-power="1" title="Heat (3/s)">🔥 Heat</button>
     <button class="power-btn"        data-power="2" title="Wind (1/s)">💨 Wind</button>
     <button class="power-btn"        data-power="3" title="Growth (4/s)">🌱 Growth</button>
+    <button class="power-btn power-locked" data-power="4" data-unlock-level="4" title="Life (5/s) — Lv. 4 required">🐾 Life</button>
 
     <button id="view-toggle" class="power-btn" title="Toggle 2D / 2.5D isometric view (V)">◆ 2.5D</button>
 
@@ -964,6 +1083,14 @@
   </div>
 
   </div><!-- /game-container -->
+
+  <!-- Level Up Celebration -->
+  <div id="levelup-overlay">
+    <div class="levelup-card">
+      <div class="levelup-title">⭐ LEVEL UP!</div>
+      <div class="levelup-subtitle" id="levelup-text">Level 2</div>
+    </div>
+  </div>
 
   <!-- Keyboard Shortcuts Overlay -->
   <div id="shortcuts-overlay">

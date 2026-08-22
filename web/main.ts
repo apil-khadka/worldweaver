@@ -114,6 +114,8 @@ async function main() {
 
   // ── Audio Engine ─────────────────────────────────────────────────────────
   const audio = AudioEngine.getInstance();
+  // Expose for UI level-up sound
+  (window as any).__wwAudio = audio;
 
   // Init audio on first user interaction (browser autoplay policy)
   const initAudio = () => {
