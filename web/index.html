@@ -173,6 +173,19 @@
       font-size: 12px;
       font-weight: 500;
     }
+
+    /* View mode toggle */
+    #view-toggle {
+      margin-left: var(--sp-4);
+      border-color: var(--border-highlight);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    #view-toggle:hover {
+      border-color: var(--accent);
+      background: #FFF8EB;
+      color: var(--accent);
+    }
     #influence-track {
       width: 160px;
       height: 5px;
@@ -592,9 +605,149 @@
     #game-container.visible {
       display: flex;
     }
+
+    /* ── Loading Screen ──────────────────────────────────── */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #1A0F08 0%, #2C1810 30%, #1A0F08 100%);
+      transition: opacity 0.8s ease, visibility 0.8s ease;
+    }
+    #loading-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .loading-logo {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #D4881A 0%, #F5C563 40%, #D4881A 70%, #A66510 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: loading-shimmer 3s ease-in-out infinite;
+      text-shadow: 0 0 40px rgba(212, 136, 26, 0.3);
+      margin-bottom: 12px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+    @keyframes loading-shimmer {
+      0% { background-position: 100% 50%; }
+      50% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+    .loading-tagline {
+      font-size: 16px;
+      color: rgba(212, 136, 26, 0.7);
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      margin-bottom: 40px;
+    }
+    .loading-status {
+      font-size: 13px;
+      color: rgba(245, 237, 227, 0.5);
+      font-weight: 400;
+    }
+    .loading-dots::after {
+      content: '';
+      animation: loading-dots-anim 1.5s steps(4, end) infinite;
+    }
+    @keyframes loading-dots-anim {
+      0%  { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    /* Ambient particles behind the logo */
+    .loading-particles {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .loading-particles::before,
+    .loading-particles::after {
+      content: '';
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(212, 136, 26, 0.08) 0%, transparent 70%);
+      animation: particle-float 8s ease-in-out infinite;
+    }
+    .loading-particles::before {
+      top: 20%;
+      left: 30%;
+    }
+    .loading-particles::after {
+      bottom: 20%;
+      right: 25%;
+      animation-delay: -4s;
+      animation-duration: 10s;
+    }
+    @keyframes particle-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(20px, -30px) scale(1.2); }
+    }
+
+    /* ── First-Time Tooltip ──────────────────────────────── */
+    #first-time-tooltip {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background: rgba(44, 24, 16, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(212, 136, 26, 0.3);
+      border-radius: 8px;
+      color: rgba(253, 248, 240, 0.9);
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 10000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    #first-time-tooltip.visible {
+      opacity: 1;
+    }
+    #first-time-tooltip kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      background: rgba(212, 136, 26, 0.2);
+      border: 1px solid rgba(212, 136, 26, 0.4);
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 11px;
+      margin: 0 2px;
+    }
   </style>
 </head>
 <body>
+
+  <!-- Loading Screen -->
+  <div id="loading-overlay">
+    <div class="loading-particles"></div>
+    <div class="loading-logo">WorldWeaver</div>
+    <div class="loading-tagline">One World. Many Forces.</div>
+    <div class="loading-status">Connecting to world<span class="loading-dots"></span></div>
+  </div>
+
+  <!-- First-time Tooltip -->
+  <div id="first-time-tooltip">
+    Click to apply your power. Press <kbd>1</kbd>–<kbd>5</kbd> to switch forces.
+  </div>
 
   <!-- Lobby Overlay -->
   <div id="lobby-overlay">
@@ -644,6 +797,8 @@
     <button class="power-btn"        data-power="2" title="Wind (1/s)">💨 Wind</button>
     <button class="power-btn"        data-power="3" title="Growth (4/s)">🌱 Growth</button>
 
+    <button id="view-toggle" class="power-btn" title="Toggle 2D / 2.5D isometric view (V)">◆ 2.5D</button>
+
     <div id="influence-bar">
       <span>Influence</span>
       <div id="influence-track"><div id="influence-fill"></div></div>
@@ -655,6 +810,7 @@
   <div id="canvas-wrapper">
     <canvas id="world-canvas"></canvas>
     <canvas id="power-overlay"></canvas>
+    <canvas id="particle-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;"></canvas>
     <div id="zoom-indicator">1×</div>
     <canvas id="minimap" style="position:absolute;bottom:12px;right:12px;width:150px;height:75px;background:rgba(245,237,227,0.85);border:1px solid #C9B896;border-radius:6px;image-rendering:pixelated;pointer-events:none;z-index:50;box-shadow:0 2px 8px rgba(44,24,16,0.08);"></canvas>
     <div id="status-overlay">

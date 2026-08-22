@@ -92,8 +92,13 @@ export class WorldNetwork {
 
   constructor(
     private readonly wsUrl: string,
-    private readonly renderer: IGameRenderer,
+    private renderer: IGameRenderer,
   ) {}
+
+  /** Hot-swap the renderer backend (used by view mode toggle). */
+  swapRenderer(r: IGameRenderer): void {
+    this.renderer = r;
+  }
 
   connect(): void {
     if (this.ws) return;

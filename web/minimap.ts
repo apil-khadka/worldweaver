@@ -32,7 +32,7 @@ const PALETTE = new Uint8Array([
 export class Minimap {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly canvas: HTMLCanvasElement;
-  private readonly renderer: IGameRenderer;
+  private renderer: IGameRenderer;
   private readonly viewCanvas: HTMLCanvasElement;
   private intervalId: number | null = null;
 
@@ -43,6 +43,11 @@ export class Minimap {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Minimap canvas 2D not supported");
     this.ctx = ctx;
+  }
+
+  /** Hot-swap the renderer backend (used by view mode toggle). */
+  swapRenderer(r: IGameRenderer): void {
+    this.renderer = r;
   }
 
   /** Start the 500ms update loop. */

@@ -47,9 +47,14 @@ export class InputHandler {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly network: WorldNetwork,
-    private readonly renderer: IGameRenderer,
+    private renderer: IGameRenderer,
   ) {
     this.zoomIndicator = document.getElementById("zoom-indicator");
+  }
+
+  /** Hot-swap the renderer backend (used by view mode toggle). */
+  swapRenderer(r: IGameRenderer): void {
+    this.renderer = r;
   }
 
   attach(): void {

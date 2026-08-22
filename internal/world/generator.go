@@ -13,14 +13,15 @@ func newGenerator(w *World, rng *rand.Rand) *generator {
 	return &generator{w: w, rng: rng}
 }
 
-// generate produces a spectacular demo world designed to show off the
-// simulation immediately:
-//   - Large mountain/plateau in center with cave networks
-//   - A water basin/lake pre-filled on the left side
-//   - Vegetation growing near the water
-//   - A lava pool deep underground
-//   - A dramatic overhang where sand can cascade on load
-//   - Oil droplets (herbivore stand-in) scattered on vegetation
+// generate produces a spectacular marketing-ready demo world designed to
+// immediately impress within 3 seconds of loading:
+//   - VOLCANO: dramatic cone of rock with lava core and smoke plume
+//   - WATERFALL: water flowing off a cliff into a lake basin
+//   - FOREST: dense vegetation on fertile soil near the lake
+//   - CAVES: underground networks with exposed lava geology
+//   - DESERT: sand dunes with an occasional oasis
+//   - CREATURES: herbivores in the forest, predators on rocky crags
+//   - Clear visual ZONES with designed feel, not random noise
 func (g *generator) generate() {
 	w := g.w
 	W := w.Width
@@ -31,208 +32,469 @@ func (g *generator) generate() {
 		w.Material[i] = MatEmpty
 	}
 
-	// ── Terrain heightmap using layered sine waves ───────────────────────────
-	// Creates a mountain in the center, valleys on sides
+	// ── Layered terrain heightmap ───────────────────────────────────────────
+	// Base terrain uses large-scale sin/cos waves + detail harmonics.
+	// The world has distinct biome zones (left→right): Desert | Volcano | Forest+Lake | Cliffs
 	heights := make([]int, W)
-	centerX := float64(W) / 2.0
 	for x := range W {
 		fx := float64(x)
-		// Base terrain: gentle slope
-		base := float64(H) * 0.55
+		frac := fx / float64(W) // 0.0 → 1.0 across the world
 
-		// Central mountain: gaussian peak
-		dist := (fx - centerX) / (float64(W) * 0.2)
-		mountain := float64(H) * 0.3 * math.Exp(-dist*dist)
+		// Base terrain: gentle rolling hills
+		base := float64(H) * 0.52
 
-		// Add some noise for natural look
-		noise := math.Sin(fx*0.05)*8 + math.Sin(fx*0.12)*4 + math.Sin(fx*0.03)*12
+		// Zone shaping: desert is flat, volcano is a peak, forest is a valley, right side has cliffs
+		var zoneShape float64
 
-		heights[x] = int(base - mountain + noise)
+		// Desert zone (left 25%): flat with gentle dunes
+		if frac < 0.25 {
+			localFrac := frac / 0.25
+			dune := math.Sin(fx*0.04)*6 + math.Sin(fx*0.09)*3
+			zoneShape = dune + 5.0*math.Sin(localFrac*math.Pi) // slight depression
+		}
+
+		// Volcano zone (25-45%): dramatic cone
+		if frac >= 0.25 && frac < 0.45 {
+			volcanoCenterFrac := 0.35
+			dist := (frac - volcanoCenterFrac) / 0.10
+			volcanoHeight := float64(H) * 0.35 * math.Exp(-dist*dist*2.5)
+			zoneShape = -volcanoHeight // negative = higher terrain
+		}
+
+		// Forest/lake valley (45-75%): lower terrain with a lake basin
+		if frac >= 0.45 && frac < 0.75 {
+			localFrac := (frac - 0.45) / 0.30
+			valleyDepth := 30.0 * math.Sin(localFrac * math.Pi)
+			zoneShape = valleyDepth
+		}
+
+		// Cliff zone (75-100%): dramatic cliff with waterfall source
+		if frac >= 0.75 {
+			localFrac := (frac - 0.75) / 0.25
+			cliffRise := -float64(H) * 0.15 * (1.0 - math.Exp(-localFrac*4.0))
+			zoneShape = cliffRise
+		}
+
+		// Detail noise (harmonics of sin/cos — no external noise lib)
+		detail := math.Sin(fx*0.05)*8 +
+			math.Cos(fx*0.12)*4 +
+			math.Sin(fx*0.03+1.7)*10 +
+			math.Sin(fx*0.2)*2
+
+		heights[x] = int(base + zoneShape + detail)
+		if heights[x] < 10 {
+			heights[x] = 10
+		}
+		if heights[x] > H-20 {
+			heights[x] = H - 20
+		}
 	}
 
 	// ── Fill terrain layers ─────────────────────────────────────────────────
 	for x := range W {
 		surfaceY := heights[x]
-		for y := range H {
-			if y < surfaceY {
-				continue // air
-			}
+		frac := float64(x) / float64(W)
+		for y := surfaceY; y < H; y++ {
 			depth := y - surfaceY
-			switch {
-			case depth < 3:
-				w.Material[y*W+x] = MatSoil
-			case depth < 8:
-				if g.rng.Intn(100) < 70 {
-					w.Material[y*W+x] = MatSoil
-				} else {
+			if frac < 0.25 {
+				// Desert: sand on top, rock below
+				switch {
+				case depth < 6:
 					w.Material[y*W+x] = MatSand
-				}
-			case depth < 20:
-				if g.rng.Intn(100) < 85 {
+				case depth < 15:
+					if g.rng.Intn(100) < 40 {
+						w.Material[y*W+x] = MatSand
+					} else {
+						w.Material[y*W+x] = MatRock
+					}
+				default:
 					w.Material[y*W+x] = MatRock
-				} else {
-					w.Material[y*W+x] = MatSoil
 				}
-			default:
-				w.Material[y*W+x] = MatRock
+			} else if frac >= 0.45 && frac < 0.75 {
+				// Forest valley: rich soil
+				switch {
+				case depth < 5:
+					w.Material[y*W+x] = MatSoil
+				case depth < 12:
+					if g.rng.Intn(100) < 60 {
+						w.Material[y*W+x] = MatSoil
+					} else {
+						w.Material[y*W+x] = MatRock
+					}
+				default:
+					w.Material[y*W+x] = MatRock
+				}
+			} else {
+				// Volcano / cliff zones: mostly rock
+				switch {
+				case depth < 2:
+					w.Material[y*W+x] = MatSoil
+				case depth < 6:
+					if g.rng.Intn(100) < 30 {
+						w.Material[y*W+x] = MatSoil
+					} else {
+						w.Material[y*W+x] = MatRock
+					}
+				default:
+					w.Material[y*W+x] = MatRock
+				}
 			}
 		}
 	}
 
-	// ── Central plateau/flat top ────────────────────────────────────────────
-	plateauLeft := W*2/5
-	plateauRight := W*3/5
-	for x := plateauLeft; x < plateauRight; x++ {
-		surfaceY := heights[x]
-		// Flatten the top to form a plateau
-		flatY := heights[W/2] - 5
-		if surfaceY > flatY {
-			for y := flatY; y < surfaceY; y++ {
-				if y >= 0 && y < H {
-					w.Material[y*W+x] = MatSoil
-				}
-			}
-			heights[x] = flatY
-		}
-	}
-
-	// ── Cave networks inside the mountain ───────────────────────────────────
-	g.carveCave(W/2, H*55/100, 60, 15)
-	g.carveCave(W/2-30, H*60/100, 40, 10)
-	g.carveCave(W/2+25, H*65/100, 35, 12)
-
-	// ── Water basin on the left side ────────────────────────────────────────
-	// Carve a depression and fill with water
-	basinCX := W / 5
-	basinW := W / 6
-	basinDepth := 25
-	basinTopY := heights[basinCX] - 5
-
-	for x := basinCX - basinW/2; x < basinCX+basinW/2; x++ {
+	// ── VOLCANO: cone with lava core and smoke ──────────────────────────────
+	volcanoX := int(0.35 * float64(W))
+	volcanoTopY := heights[volcanoX]
+	// Carve crater at the top
+	craterW := 16
+	craterDepth := 20
+	for dx := -craterW; dx <= craterW; dx++ {
+		x := volcanoX + dx
 		if x < 0 || x >= W {
 			continue
 		}
-		// Parabolic depression
-		dx := float64(x-basinCX) / float64(basinW/2)
-		carveDepth := int(float64(basinDepth) * (1.0 - dx*dx))
-		if carveDepth < 0 {
-			carveDepth = 0
+		// Parabolic crater
+		edgeDist := 1.0 - (float64(dx*dx) / float64(craterW*craterW))
+		depth := int(float64(craterDepth) * edgeDist)
+		for dy := 0; dy < depth; dy++ {
+			y := volcanoTopY + dy
+			if y >= 0 && y < H {
+				if dy > depth-6 {
+					w.Material[y*W+x] = MatLava // lava at bottom of crater
+				} else {
+					w.Material[y*W+x] = MatEmpty // air in crater
+				}
+			}
 		}
-		surfY := heights[x]
-		for y := surfY; y < surfY+carveDepth && y < H; y++ {
-			w.Material[y*W+x] = MatWater
+	}
+	// Lava tube running down from crater
+	lavatubeY := volcanoTopY + craterDepth
+	for dy := 0; dy < 60; dy++ {
+		for dx := -3; dx <= 3; dx++ {
+			x := volcanoX + dx
+			y := lavatubeY + dy
+			if x >= 0 && x < W && y >= 0 && y < H {
+				w.Material[y*W+x] = MatLava
+			}
 		}
-		// Fill above water surface level to the basin rim with water too
-		waterLevel := basinTopY + 8
-		for y := waterLevel; y < surfY && y < H; y++ {
-			if y >= 0 {
+	}
+	// Smoke rising above volcano
+	for dy := 1; dy < 30; dy++ {
+		spread := dy / 4
+		for dx := -spread; dx <= spread; dx++ {
+			x := volcanoX + dx + g.rng.Intn(3) - 1
+			y := volcanoTopY - dy
+			if x >= 0 && x < W && y >= 0 && y < H {
+				if g.rng.Intn(100) < 50 {
+					w.Material[y*W+x] = MatSmoke
+				}
+			}
+		}
+	}
+	// Set high temperature around volcano
+	for dy := -10; dy < craterDepth+60; dy++ {
+		for dx := -20; dx <= 20; dx++ {
+			x := volcanoX + dx
+			y := volcanoTopY + dy
+			if x >= 0 && x < W && y >= 0 && y < H {
+				dist := math.Sqrt(float64(dx*dx + dy*dy))
+				temp := int16(2000.0 / (1.0 + dist*0.1))
+				idx := y*W + x
+				if temp > w.Temperature[idx] {
+					w.Temperature[idx] = temp
+				}
+			}
+		}
+	}
+
+	// ── WATERFALL: water source on cliff flowing into lake ───────────────────
+	cliffStartX := int(0.72 * float64(W))
+	// Find the cliff edge height
+	cliffEdgeY := heights[cliffStartX]
+	// Place water source at the top of the cliff, flowing left
+	waterfallX := cliffStartX
+	waterfallTopY := cliffEdgeY - 2
+	// Water source pool at cliff top
+	for dx := 0; dx < 20; dx++ {
+		for dy := -3; dy < 2; dy++ {
+			x := waterfallX + dx
+			y := waterfallTopY + dy
+			if x >= 0 && x < W && y >= 0 && y < H {
+				w.Material[y*W+x] = MatWater
+			}
+		}
+	}
+	// Waterfall stream flowing down the cliff face
+	fallHeight := 50
+	for dy := 0; dy < fallHeight; dy++ {
+		for dx := -2; dx <= 2; dx++ {
+			x := waterfallX + dx
+			y := waterfallTopY + 2 + dy
+			if x >= 0 && x < W && y >= 0 && y < H && w.Material[y*W+x] == MatEmpty {
 				w.Material[y*W+x] = MatWater
 			}
 		}
 	}
 
-	// ── Vegetation near the water ───────────────────────────────────────────
-	vegZoneLeft := basinCX - basinW/2 - 20
-	vegZoneRight := basinCX + basinW/2 + 20
-	for x := vegZoneLeft; x < vegZoneRight; x++ {
+	// ── LAKE: large water basin in the forest valley ────────────────────────
+	lakeCenter := int(0.60 * float64(W))
+	lakeWidth := int(0.12 * float64(W))
+	lakeTopY := heights[lakeCenter] + 2
+	lakeDepth := 30
+	// Carve lake basin and fill with water
+	for dx := -lakeWidth; dx <= lakeWidth; dx++ {
+		x := lakeCenter + dx
+		if x < 0 || x >= W {
+			continue
+		}
+		edgeDist := float64(dx) / float64(lakeWidth)
+		depth := int(float64(lakeDepth) * (1.0 - edgeDist*edgeDist))
+		for dy := -5; dy < depth; dy++ {
+			y := lakeTopY + dy
+			if y >= 0 && y < H {
+				w.Material[y*W+x] = MatWater
+			}
+		}
+		// Set moisture high near water
+		for dy := -20; dy < depth+10; dy++ {
+			y := lakeTopY + dy
+			if y >= 0 && y < H {
+				idx := y*W + x
+				w.Moisture[idx] = 200
+			}
+		}
+	}
+
+	// ── FOREST: dense vegetation on fertile soil near the lake ───────────────
+	forestLeft := int(0.48 * float64(W))
+	forestRight := int(0.72 * float64(W))
+	for x := forestLeft; x < forestRight; x++ {
 		if x < 0 || x >= W {
 			continue
 		}
 		surfY := heights[x]
-		// Place plants on surface where there's soil
-		for dy := -2; dy <= 0; dy++ {
+		// Plant dense vegetation on soil surfaces
+		for dy := -3; dy <= 1; dy++ {
 			y := surfY + dy
 			if y < 1 || y >= H {
 				continue
 			}
 			below := w.Material[y*W+x]
-			above := w.Material[(y-1)*W+x]
-			if below == MatSoil && above == MatEmpty && g.rng.Intn(100) < 35 {
-				w.Material[(y-1)*W+x] = MatPlant
-			}
-		}
-	}
-
-	// ── Lava pool deep underground ──────────────────────────────────────────
-	lavaCX := W / 2
-	lavaCY := H * 85 / 100
-	lavaW := 40
-	lavaH := 10
-	// First carve a chamber
-	for dy := -lavaH; dy <= lavaH; dy++ {
-		for dx := -lavaW; dx <= lavaW; dx++ {
-			x, y := lavaCX+dx, lavaCY+dy
-			if x < 0 || x >= W || y < 0 || y >= H {
+			aboveIdx := (y - 1) * W + x
+			if aboveIdx < 0 {
 				continue
 			}
-			// Elliptical shape
-			ex := float64(dx) / float64(lavaW)
-			ey := float64(dy) / float64(lavaH)
-			if ex*ex+ey*ey <= 1.0 {
-				if dy > lavaH/3 {
-					w.Material[y*W+x] = MatLava
-				} else {
-					w.Material[y*W+x] = MatEmpty // air pocket above lava
+			above := w.Material[aboveIdx]
+			if below == MatSoil && above == MatEmpty {
+				// Dense forest: 60% coverage
+				if g.rng.Intn(100) < 60 {
+					w.Material[aboveIdx] = MatPlant
+					// Stack plants for tree canopy effect
+					if y-2 >= 0 && g.rng.Intn(100) < 40 {
+						w.Material[(y-2)*W+x] = MatPlant
+					}
+					if y-3 >= 0 && g.rng.Intn(100) < 20 {
+						w.Material[(y-3)*W+x] = MatPlant
+					}
+				}
+			}
+		}
+		// Set moisture for forest area
+		for dy := -5; dy < 15; dy++ {
+			y := surfY + dy
+			if y >= 0 && y < H {
+				idx := y*W + x
+				if w.Moisture[idx] < 150 {
+					w.Moisture[idx] = 150
 				}
 			}
 		}
 	}
 
-	// ── Dramatic sand overhang (sand on thin soil shelf, will cascade) ───────
-	overhangX := W * 3 / 4
-	overhangY := heights[overhangX] - 3
-	// Create a thin soil ledge jutting out
-	for dx := 0; dx < 30; dx++ {
-		x := overhangX + dx
-		if x >= W {
-			break
-		}
-		// The shelf: thin soil layer
-		for dy := 0; dy < 2; dy++ {
-			y := overhangY + dy
-			if y >= 0 && y < H {
-				w.Material[y*W+x] = MatSoil
-			}
-		}
-		// Pile sand on top of the shelf -- this will cascade off edges
-		for dy := -8; dy < 0; dy++ {
-			y := overhangY + dy
+	// ── DESERT: sand dunes with oasis ───────────────────────────────────────
+	// Add extra sand shaping for dune appearance
+	desertRight := int(0.23 * float64(W))
+	for x := 10; x < desertRight; x++ {
+		surfY := heights[x]
+		// Add dune ridges
+		fx := float64(x)
+		duneHeight := int(math.Sin(fx*0.025)*5 + math.Sin(fx*0.06)*3)
+		for dy := duneHeight; dy > 0; dy-- {
+			y := surfY - dy
 			if y >= 0 && y < H {
 				w.Material[y*W+x] = MatSand
 			}
 		}
-		// Clear below the shelf so sand falls
-		for dy := 2; dy < 40; dy++ {
-			y := overhangY + dy
-			if y >= 0 && y < H && w.Material[y*W+x] != MatRock {
-				w.Material[y*W+x] = MatEmpty
+	}
+	// Oasis: small water pool with plants in the desert
+	oasisX := int(0.12 * float64(W))
+	oasisY := heights[oasisX] + 3
+	for dx := -8; dx <= 8; dx++ {
+		for dy := -2; dy <= 5; dy++ {
+			x := oasisX + dx
+			y := oasisY + dy
+			if x >= 0 && x < W && y >= 0 && y < H {
+				dist := float64(dx*dx+dy*dy) / 64.0
+				if dist < 1.0 {
+					w.Material[y*W+x] = MatWater
+				}
 			}
 		}
 	}
-
-	// ── Scatter Oil droplets on vegetation (herbivore stand-in, mat 12) ─────
-	for x := vegZoneLeft; x < vegZoneRight; x++ {
+	// Plants around oasis
+	for dx := -12; dx <= 12; dx++ {
+		x := oasisX + dx
 		if x < 0 || x >= W {
 			continue
 		}
-		for y := 1; y < H; y++ {
-			if w.Material[y*W+x] == MatPlant && w.Material[(y-1)*W+x] == MatEmpty {
-				if g.rng.Intn(100) < 8 {
-					w.Material[(y-1)*W+x] = MatOil
+		surfY := heights[x]
+		for dy := -2; dy <= 0; dy++ {
+			y := surfY + dy
+			if y >= 1 && y < H {
+				aboveIdx := (y - 1) * W + x
+				if w.Material[y*W+x] == MatSand && w.Material[aboveIdx] == MatEmpty {
+					if g.rng.Intn(100) < 30 {
+						w.Material[aboveIdx] = MatPlant
+					}
 				}
 			}
 		}
 	}
 
-	// ── Unstable water above the basin (ready to flow on first tick) ────────
-	// Add a perched water pocket that will immediately start flowing
-	perchedX := basinCX + basinW/2 + 5
-	perchedY := heights[basinCX] - 2
-	for dy := 0; dy < 6; dy++ {
-		for dx := 0; dx < 8; dx++ {
-			x, y := perchedX+dx, perchedY+dy
+	// ── CAVES with interesting geology ──────────────────────────────────────
+	// Main cave system under the volcano
+	g.carveCave(volcanoX, H*60/100, 80, 14)
+	g.carveCave(volcanoX-40, H*65/100, 50, 10)
+	g.carveCave(volcanoX+30, H*70/100, 45, 12)
+	// Cave under the forest (with exposed lava vein)
+	g.carveCave(lakeCenter, H*75/100, 60, 12)
+	// Desert caves
+	g.carveCave(int(0.15*float64(W)), H*62/100, 35, 8)
+
+	// Deep lava veins visible in caves
+	for _, cave := range []struct{ x, y int }{
+		{volcanoX, H * 60 / 100},
+		{volcanoX - 40, H * 65 / 100},
+		{lakeCenter, H * 75 / 100},
+	} {
+		// Place lava pools at bottom of caves
+		for dx := -8; dx <= 8; dx++ {
+			for dy := 2; dy < 6; dy++ {
+				x := cave.x + dx + g.rng.Intn(5) - 2
+				y := cave.y + dy
+				if x >= 0 && x < W && y >= 0 && y < H {
+					if w.Material[y*W+x] == MatEmpty {
+						w.Material[y*W+x] = MatLava
+					}
+				}
+			}
+		}
+	}
+
+	// ── CREATURES: herbivores in forest, predators on rocky crags ────────────
+	// Herbivores scattered through the forest
+	for x := forestLeft; x < forestRight; x += 8 {
+		if g.rng.Intn(100) > 30 {
+			continue
+		}
+		surfY := heights[x]
+		// Place herbivore on first available surface
+		for y := surfY - 5; y < surfY+2; y++ {
+			if y < 1 || y >= H {
+				continue
+			}
+			below := w.Material[y*W+x]
+			above := w.Material[(y-1)*W+x]
+			if (below == MatSoil || below == MatPlant) && above == MatEmpty {
+				w.Material[(y-1)*W+x] = MatHerbivore
+				break
+			}
+		}
+	}
+	// Predators on volcanic rocky areas
+	volcanoLeft := int(0.28 * float64(W))
+	volcanoRight := int(0.42 * float64(W))
+	for x := volcanoLeft; x < volcanoRight; x += 15 {
+		if g.rng.Intn(100) > 25 {
+			continue
+		}
+		surfY := heights[x]
+		for y := surfY - 3; y < surfY+2; y++ {
+			if y < 1 || y >= H {
+				continue
+			}
+			below := w.Material[y*W+x]
+			above := w.Material[(y-1)*W+x]
+			if below == MatRock && above == MatEmpty {
+				w.Material[(y-1)*W+x] = MatPredator
+				break
+			}
+		}
+	}
+
+	// ── Set temperature gradients for biome feel ────────────────────────────
+	for x := range W {
+		frac := float64(x) / float64(W)
+		for y := range H {
+			idx := y*W + x
+			// Desert is hot
+			if frac < 0.25 {
+				w.Temperature[idx] = 350 // 35°C
+			} else if frac >= 0.45 && frac < 0.75 {
+				// Forest is temperate
+				w.Temperature[idx] = 200 // 20°C
+			} else {
+				w.Temperature[idx] = 150 // 15°C base
+			}
+			// Deeper = hotter
+			depth := y - heights[x]
+			if depth > 0 {
+				w.Temperature[idx] += int16(depth / 2)
+			}
+		}
+	}
+
+	// ── Perched water ready to flow (immediate action on load) ──────────────
+	// Small water pocket above the lake that will cascade down
+	perchedX := lakeCenter - lakeWidth - 10
+	perchedY := heights[perchedX] - 5
+	for dx := 0; dx < 12; dx++ {
+		for dy := 0; dy < 5; dy++ {
+			x := perchedX + dx
+			y := perchedY + dy
 			if x >= 0 && x < W && y >= 0 && y < H {
 				w.Material[y*W+x] = MatWater
+			}
+		}
+	}
+
+	// ── Sand cascade: sand pile above a gap (will fall immediately) ─────────
+	cascadeX := int(0.20 * float64(W))
+	cascadeY := heights[cascadeX] - 2
+	for dx := 0; dx < 15; dx++ {
+		x := cascadeX + dx
+		if x >= W {
+			break
+		}
+		// Thin ledge
+		for dy := 0; dy < 2; dy++ {
+			y := cascadeY + dy
+			if y >= 0 && y < H {
+				w.Material[y*W+x] = MatSoil
+			}
+		}
+		// Sand on top
+		for dy := -6; dy < 0; dy++ {
+			y := cascadeY + dy
+			if y >= 0 && y < H {
+				w.Material[y*W+x] = MatSand
+			}
+		}
+		// Clear below
+		for dy := 2; dy < 25; dy++ {
+			y := cascadeY + dy
+			if y >= 0 && y < H && w.Material[y*W+x] != MatRock {
+				w.Material[y*W+x] = MatEmpty
 			}
 		}
 	}
@@ -250,7 +512,7 @@ func (g *generator) carveCave(cx, cy, length, radius int) {
 	x, y := cx, cy
 	for i := range length {
 		// Carve a roughly circular area
-		r := radius - g.rng.Intn(radius/3)
+		r := radius - g.rng.Intn(radius/3+1)
 		_ = i
 		for dy := -r; dy <= r; dy++ {
 			for dx := -r; dx <= r; dx++ {
@@ -265,19 +527,5 @@ func (g *generator) carveCave(cx, cy, length, radius int) {
 		// Random walk
 		x += g.rng.Intn(7) - 3
 		y += g.rng.Intn(5) - 2
-	}
-}
-
-// carveBasin fills a rectangular depression with water.
-func (g *generator) carveBasin(cx, cy, radius int) {
-	w := g.w
-	for dy := -radius / 4; dy <= radius/4; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			x, y := cx+dx, cy+dy
-			if w.Index(x, y) < 0 {
-				continue
-			}
-			w.Material[y*w.Width+x] = MatWater
-		}
 	}
 }
