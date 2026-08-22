@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorldWeaver — One World. Many Forces.</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* ── Warm Golden-Ratio Palette ─────────────────────── */
+      --bg:              #FDF8F0;
+      --surface:         #F5EDE3;
+      --panel:           #F5EDE3;
+      --panel-solid:     #F5EDE3;
+      --text:            #2C1810;
+      --muted:           #6B4C3B;
+      --accent:          #D4881A;
+      --accent-hover:    #B8720F;
+      --accent-glow:     rgba(212, 136, 26, 0.2);
+      --border:          #E8DED4;
+      --border-highlight: #D9CCBD;
+      --good:            #4A8C5C;
+      --danger:          #C44536;
+      --canvas-border:   #C9B896;
+      --radius:          10px;
+      --glass-blur:      12px;
+
+      /* Golden ratio spacing scale: 1, 1.618, 2.618, 4.236, 6.854 */
+      --sp-1: 4px;
+      --sp-2: 6px;
+      --sp-3: 10px;
+      --sp-4: 16px;
+      --sp-5: 26px;
+      --sp-6: 42px;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--sp-3) var(--sp-5);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(44, 24, 16, 0.04);
+    }
+    #header .logo {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    #header .meta {
+      display: flex;
+      gap: var(--sp-5);
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    #header .meta span b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* Connection badge with animated pulse */
+    #connection-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+    #connection-badge::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 4px rgba(107, 76, 59, 0.3);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    #connection-badge.connected::before {
+      background: var(--good);
+      box-shadow: 0 0 6px rgba(74, 140, 92, 0.5);
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* ── Power bar ───────────────────────────────────────── */
+    #powerbar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-3) var(--sp-5);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .power-btn {
+      padding: var(--sp-2) var(--sp-4);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(44, 24, 16, 0.04);
+    }
+    .power-btn:hover {
+      background: #FFFCF7;
+      border-color: var(--border-highlight);
+      color: var(--text);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(44, 24, 16, 0.08);
+    }
+    .power-btn.active {
+      background: #FFF8EB;
+      color: var(--text);
+      border-color: var(--accent);
+      box-shadow: 0 2px 10px rgba(212, 136, 26, 0.15), inset 0 0 0 1px rgba(212, 136, 26, 0.1);
+      font-weight: 600;
+    }
+    /* Per-power colored indicators when active */
+    .power-btn[data-power="0"].active {
+      border-color: #5B9BD5;
+      background: #F0F7FF;
+      box-shadow: 0 2px 10px rgba(91, 155, 213, 0.15);
+    }
+    .power-btn[data-power="1"].active {
+      border-color: #D4881A;
+      background: #FFF8EB;
+      box-shadow: 0 2px 10px rgba(212, 136, 26, 0.15);
+    }
+    .power-btn[data-power="2"].active {
+      border-color: #8B7EC8;
+      background: #F8F5FF;
+      box-shadow: 0 2px 10px rgba(139, 126, 200, 0.15);
+    }
+    .power-btn[data-power="3"].active {
+      border-color: #4A8C5C;
+      background: #F2FAF5;
+      box-shadow: 0 2px 10px rgba(74, 140, 92, 0.15);
+    }
+
+    #influence-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* View mode toggle */
+    #view-toggle {
+      margin-left: var(--sp-4);
+      border-color: var(--border-highlight);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    #view-toggle:hover {
+      border-color: var(--accent);
+      background: #FFF8EB;
+      color: var(--accent);
+    }
+    #influence-track {
+      width: 160px;
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: inset 0 1px 2px rgba(44, 24, 16, 0.06);
+    }
+    #influence-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #D4881A 0%, #E8A84C 100%);
+      width: 100%;
+      transition: width 0.3s ease;
+      border-radius: 3px;
+    }
+    /* Pulse animation when influence is low */
+    @keyframes influence-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    #influence-fill.low {
+      animation: influence-pulse 1.5s ease-in-out infinite;
+    }
+    #influence-value {
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    /* ── Canvas area ─────────────────────────────────────── */
+    #canvas-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #FAF5EC;
+    }
+    /* Atmospheric depth gradient — sky (top) to underground (bottom) */
+    #canvas-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      background: linear-gradient(
+        to bottom,
+        rgba(100, 150, 255, 0.05) 0%,
+        transparent 15%,
+        transparent 85%,
+        rgba(0, 0, 0, 0.08) 100%
+      );
+    }
+    /* Day/night cycle — subtle color temperature shift */
+    #canvas-wrapper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 11;
+      animation: daynight-cycle 60s ease-in-out infinite;
+      opacity: 0.04;
+    }
+    @keyframes daynight-cycle {
+      0%   { background: rgba(255, 200, 100, 1); }  /* warm golden */
+      25%  { background: transparent; }               /* neutral */
+      50%  { background: rgba(100, 140, 255, 1); }   /* cool blue */
+      75%  { background: transparent; }               /* neutral */
+      100% { background: rgba(255, 200, 100, 1); }   /* warm golden */
+    }
+    #world-canvas {
+      display: block;
+      cursor: crosshair;
+      image-rendering: pixelated;
+    }
+    /* Zoom indicator badge */
+    #zoom-indicator {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 4px 10px;
+      background: rgba(253, 248, 240, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      z-index: 50;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+    #zoom-indicator.visible {
+      opacity: 1;
+    }
+
+    /* ── Status overlay ──────────────────────────────────── */
+    #status-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(253, 248, 240, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: var(--sp-5) var(--sp-6);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(44, 24, 16, 0.1), 0 2px 8px rgba(44, 24, 16, 0.05);
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      display: none;
+      pointer-events: none;
+    }
+    #status-overlay.visible {
+      display: block;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #status-overlay .status-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: var(--sp-3);
+      letter-spacing: 0.01em;
+    }
+    #status-overlay #status-body {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.618;
+    }
+
+    /* ── Footer metrics ──────────────────────────────────── */
+    #footer {
+      display: flex;
+      gap: 0;
+      align-items: center;
+      padding: var(--sp-2) var(--sp-5);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    #footer span {
+      padding: 0 var(--sp-4);
+      border-right: 1px solid var(--border);
+    }
+    #footer span:last-child {
+      border-right: none;
+    }
+    #footer span:first-child {
+      padding-left: 0;
+    }
+    #footer span b {
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .metric-good { color: var(--good) !important; }
+    .metric-bad  { color: var(--danger) !important; }
+
+    /* ── Remote Cursors ──────────────────────────────────── */
+    .remote-cursor {
+      position: absolute;
+      pointer-events: none;
+      z-index: 100;
+      transition: left 0.08s linear, top 0.08s linear;
+      filter: drop-shadow(0 1px 2px rgba(44, 24, 16, 0.2));
+    }
+    .remote-cursor svg {
+      width: 16px;
+      height: 16px;
+    }
+    .cursor-label {
+      position: absolute;
+      top: 16px;
+      left: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #FDF8F0;
+      background: rgba(44, 24, 16, 0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    /* ── Toast Notifications ─────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      padding: var(--sp-3) var(--sp-5);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 1000;
+      pointer-events: none;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 4px 16px rgba(44, 24, 16, 0.1);
+    }
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast-join {
+      background: rgba(74, 140, 92, 0.08);
+      color: var(--good);
+      border: 1px solid rgba(74, 140, 92, 0.2);
+    }
+    .toast-leave {
+      background: rgba(196, 69, 54, 0.08);
+      color: var(--danger);
+      border: 1px solid rgba(196, 69, 54, 0.2);
+    }
+
+    /* ── Lobby Overlay ──────────────────────────────────── */
+    #lobby-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #FDF8F0 0%, #F5EDE3 50%, #FDF8F0 100%);
+    }
+    #lobby-overlay.visible {
+      display: flex;
+    }
+    .lobby-card {
+      width: 480px;
+      max-height: 80vh;
+      background: #FFFDF9;
+      border: 1px solid var(--border-highlight);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(44, 24, 16, 0.1);
+      overflow-y: auto;
+    }
+    .lobby-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text);
+      text-align: center;
+      margin-bottom: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .lobby-subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 24px;
+    }
+    .lobby-section {
+      margin-bottom: 20px;
+    }
+    .lobby-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .lobby-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .lobby-input:focus {
+      border-color: var(--accent);
+    }
+    .lobby-input::placeholder {
+      color: var(--muted);
+    }
+    #lobby-world-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+    .lobby-world-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .lobby-world-row:hover {
+      border-color: var(--border-highlight);
+      background: rgba(212, 136, 26, 0.03);
+    }
+    .lobby-world-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .lobby-world-name {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .lobby-world-meta {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .lobby-world-players {
+      font-size: 12px;
+      color: var(--good);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .lobby-join-btn {
+      padding: 6px 16px;
+      background: rgba(212, 136, 26, 0.08);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lobby-join-btn:hover {
+      background: rgba(212, 136, 26, 0.16);
+      transform: translateY(-1px);
+    }
+    #lobby-create-btn {
+      width: 100%;
+      padding: 10px;
+      background: var(--surface);
+      border: 1px dashed var(--border-highlight);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #lobby-create-btn:hover {
+      background: #FFFCF7;
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    #lobby-create-panel {
+      display: none;
+      margin-top: 12px;
+      padding: 16px;
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    #lobby-create-panel.visible {
+      display: block;
+    }
+    #lobby-create-panel .lobby-input {
+      margin-bottom: 8px;
+    }
+    #lobby-create-submit {
+      width: 100%;
+      padding: 10px;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    #lobby-create-submit:hover {
+      opacity: 0.85;
+    }
+    .lobby-status {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 12px;
+      min-height: 18px;
+    }
+    .lobby-status.error {
+      color: var(--danger);
+    }
+
+    /* ── Game Container (hidden until lobby done) ─────── */
+    #game-container {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+    #game-container.visible {
+      display: flex;
+    }
+
+    /* ── Loading Screen ──────────────────────────────────── */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #1A0F08 0%, #2C1810 30%, #1A0F08 100%);
+      transition: opacity 0.8s ease, visibility 0.8s ease;
+    }
+    #loading-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .loading-logo {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #D4881A 0%, #F5C563 40%, #D4881A 70%, #A66510 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: loading-shimmer 3s ease-in-out infinite;
+      text-shadow: 0 0 40px rgba(212, 136, 26, 0.3);
+      margin-bottom: 12px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+    @keyframes loading-shimmer {
+      0% { background-position: 100% 50%; }
+      50% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+    .loading-tagline {
+      font-size: 16px;
+      color: rgba(212, 136, 26, 0.7);
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      margin-bottom: 40px;
+    }
+    .loading-status {
+      font-size: 13px;
+      color: rgba(245, 237, 227, 0.5);
+      font-weight: 400;
+    }
+    .loading-dots::after {
+      content: '';
+      animation: loading-dots-anim 1.5s steps(4, end) infinite;
+    }
+    @keyframes loading-dots-anim {
+      0%  { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    /* Ambient particles behind the logo */
+    .loading-particles {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .loading-particles::before,
+    .loading-particles::after {
+      content: '';
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(212, 136, 26, 0.08) 0%, transparent 70%);
+      animation: particle-float 8s ease-in-out infinite;
+    }
+    .loading-particles::before {
+      top: 20%;
+      left: 30%;
+    }
+    .loading-particles::after {
+      bottom: 20%;
+      right: 25%;
+      animation-delay: -4s;
+      animation-duration: 10s;
+    }
+    @keyframes particle-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(20px, -30px) scale(1.2); }
+    }
+
+    /* ── First-Time Tooltip ──────────────────────────────── */
+    #first-time-tooltip {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background: rgba(44, 24, 16, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(212, 136, 26, 0.3);
+      border-radius: 8px;
+      color: rgba(253, 248, 240, 0.9);
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 10000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    #first-time-tooltip.visible {
+      opacity: 1;
+    }
+    #first-time-tooltip kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      background: rgba(212, 136, 26, 0.2);
+      border: 1px solid rgba(212, 136, 26, 0.4);
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 11px;
+      margin: 0 2px;
+    }
+
+    /* ── Game Feel: Screen Shake ─────────────────────────── */
+    @keyframes shake {
+      0%   { transform: translate(2px, -1px); }
+      25%  { transform: translate(-3px, 2px); }
+      50%  { transform: translate(1px, -2px); }
+      75%  { transform: translate(-2px, 1px); }
+      100% { transform: translate(0, 0); }
+    }
+    #canvas-wrapper.shake {
+      animation: shake 0.15s ease-out;
+    }
+
+    /* ── Game Feel: Power Selection Bounce ────────────────── */
+    @keyframes power-bounce {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .power-btn.bounce {
+      animation: power-bounce 0.2s ease-out;
+    }
+    @keyframes border-pulse {
+      0%   { box-shadow: 0 0 0 0 var(--accent-glow); }
+      50%  { box-shadow: 0 0 0 4px var(--accent-glow); }
+      100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    }
+    .power-btn.pulse-border {
+      animation: border-pulse 0.3s ease-out;
+    }
+
+    /* ── Game Feel: Influence Warning ────────────────────── */
+    @keyframes influence-warn-glow {
+      0%, 100% { box-shadow: 0 0 4px rgba(196, 69, 54, 0.3); }
+      50%      { box-shadow: 0 0 12px rgba(196, 69, 54, 0.6); }
+    }
+    #influence-track.low-influence {
+      animation: influence-warn-glow 1.2s ease-in-out infinite;
+    }
+    #influence-track.low-influence #influence-fill,
+    #influence-fill.low-gradient {
+      background: linear-gradient(90deg, #C44536 0%, #D4881A 100%) !important;
+    }
+    #influence-low-text {
+      font-size: 10px;
+      color: var(--danger);
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+    }
+    #influence-low-text.visible {
+      opacity: 1;
+    }
+
+    /* ── Game Feel: Shortcuts Overlay ────────────────────── */
+    #shortcuts-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    #shortcuts-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #FFF8EB;
+    }
+    #shortcuts-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(44, 24, 16, 0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #shortcuts-overlay.visible {
+      display: flex;
+    }
+    .shortcuts-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 32px;
+      box-shadow: 0 12px 40px rgba(44, 24, 16, 0.15);
+      min-width: 280px;
+    }
+    .shortcuts-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .shortcut-row:last-child {
+      border-bottom: none;
+    }
+    .shortcut-row kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 32px;
+      text-align: center;
+    }
+    .shortcut-row span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loading-overlay">
+    <div class="loading-particles"></div>
+    <div class="loading-logo">WorldWeaver</div>
+    <div class="loading-tagline">One World. Many Forces.</div>
+    <div class="loading-status">Connecting to world<span class="loading-dots"></span></div>
+  </div>
+
+  <!-- First-time Tooltip -->
+  <div id="first-time-tooltip">
+    Click to apply your power. Press <kbd>1</kbd>–<kbd>5</kbd> to switch forces.
+  </div>
+
+  <!-- Lobby Overlay -->
+  <div id="lobby-overlay">
+    <div class="lobby-card">
+      <div class="lobby-title">⬛ WorldWeaver</div>
+      <div class="lobby-subtitle">One World. Many Forces.</div>
+
+      <div class="lobby-section">
+        <label>Your Name</label>
+        <input type="text" id="lobby-nickname" class="lobby-input" placeholder="Enter nickname…" maxlength="20" />
+      </div>
+
+      <div class="lobby-section">
+        <label>Available Worlds</label>
+        <div id="lobby-world-list"></div>
+      </div>
+
+      <button id="lobby-create-btn">+ Create New World</button>
+      <div id="lobby-create-panel">
+        <input type="text" id="lobby-create-name" class="lobby-input" placeholder="World name…" maxlength="30" />
+        <input type="number" id="lobby-create-seed" class="lobby-input" placeholder="Seed (random if empty)" />
+        <button id="lobby-create-submit">Create World</button>
+      </div>
+
+      <div id="lobby-status" class="lobby-status"></div>
+    </div>
+  </div>
+
+  <!-- Game Container (hidden until lobby completes) -->
+  <div id="game-container">
+
+  <!-- Header -->
+  <div id="header">
+    <span class="logo">⬛ WORLDWEAVER</span>
+    <div class="meta">
+      <span>Stability: <b id="hdr-stability">–</b></span>
+      <span>Players: <b id="hdr-players">–</b></span>
+      <span><b id="hdr-nickname"></b></span>
+      <span id="connection-badge">⚪ Connecting…</span>
+      <button id="shortcuts-btn" title="Keyboard shortcuts (?)">?</button>
+    </div>
+  </div>
+
+  <!-- Power selection + influence -->
+  <div id="powerbar">
+    <button class="power-btn active" data-power="0" title="Rain (2/s)">🌧 Rain</button>
+    <button class="power-btn"        data-power="1" title="Heat (3/s)">🔥 Heat</button>
+    <button class="power-btn"        data-power="2" title="Wind (1/s)">💨 Wind</button>
+    <button class="power-btn"        data-power="3" title="Growth (4/s)">🌱 Growth</button>
+
+    <button id="view-toggle" class="power-btn" title="Toggle 2D / 2.5D isometric view (V)">◆ 2.5D</button>
+
+    <div id="influence-bar">
+      <span>Influence</span>
+      <div id="influence-track"><div id="influence-fill"></div></div>
+      <span id="influence-value">100</span>
+      <span id="influence-low-text">Low influence — regenerating…</span>
+    </div>
+  </div>
+
+  <!-- World canvas -->
+  <div id="canvas-wrapper">
+    <canvas id="world-canvas"></canvas>
+    <canvas id="power-overlay"></canvas>
+    <canvas id="particle-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;"></canvas>
+    <div id="zoom-indicator">1×</div>
+    <canvas id="minimap" style="position:absolute;bottom:12px;right:12px;width:150px;height:75px;background:rgba(245,237,227,0.85);border:1px solid #C9B896;border-radius:6px;image-rendering:pixelated;pointer-events:none;z-index:50;box-shadow:0 2px 8px rgba(44,24,16,0.08);"></canvas>
+    <div id="status-overlay">
+      <div class="status-title" id="status-title">Connecting to world…</div>
+      <div id="status-body"></div>
+    </div>
+  </div>
+
+  <!-- Footer metrics -->
+  <div id="footer">
+    <span>TPS: <b id="ft-tps">–</b></span>
+    <span>Tick p95: <b id="ft-p95">–</b> ms</span>
+    <span>Cells: <b id="ft-cells">–</b></span>
+    <span>Active: <b id="ft-active">–</b></span>
+    <span>Chunks: <b id="ft-chunks">–</b></span>
+    <span>Net out: <b id="ft-net">–</b> KB/s</span>
+    <span>RTT: <b id="ft-rtt">–</b> ms</span>
+  </div>
+
+  </div><!-- /game-container -->
+
+  <!-- Keyboard Shortcuts Overlay -->
+  <div id="shortcuts-overlay">
+    <div class="shortcuts-card">
+      <h3>Keyboard Shortcuts</h3>
+      <div class="shortcut-row"><kbd>WASD</kbd> <span>Pan camera</span></div>
+      <div class="shortcut-row"><kbd>1–5</kbd> <span>Select power</span></div>
+      <div class="shortcut-row"><kbd>Scroll</kbd> <span>Zoom</span></div>
+      <div class="shortcut-row"><kbd>M</kbd> <span>Toggle minimap</span></div>
+      <div class="shortcut-row"><kbd>V</kbd> <span>Toggle 2D / 2.5D view</span></div>
+      <div class="shortcut-row"><kbd>?</kbd> <span>This help</span></div>
+    </div>
+  </div>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>

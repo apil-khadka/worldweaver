@@ -11,8 +11,17 @@
   },
   "devDependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^4.7.0",
     "@webgpu/types": "^0.1.72",
     "typescript": "5.5.4",
     "vite": "5.4.2"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.4.5",
+    "@astryxdesign/theme-neutral": "^0.4.5",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
