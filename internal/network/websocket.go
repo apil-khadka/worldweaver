@@ -35,6 +35,13 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	// WebSocket endpoint
 	r.Get("/ws", hub.handleWebSocket)
 
+	// Health check — used by Docker/Dokploy for readiness
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
 	// Metrics API — JSON, no auth required for hackathon scope
 	r.Get("/api/metrics", func(w http.ResponseWriter, r *http.Request) {
 		snap := m.Snapshot()

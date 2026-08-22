@@ -1,0 +1,42 @@
+# docker-compose.yml — WorldWeaver for Dokploy
+# Deploy both services in Dokploy's Docker Compose mode.
+# The frontend proxies /ws to the backend internally.
+
+services:
+  worldweaver-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: worldweaver-backend
+    restart: unless-stopped
+    volumes:
+      - world-data:/app/data
+    environment:
+      - TZ=UTC
+    expose:
+      - "8080"
+    networks:
+      - worldweaver
+
+  worldweaver-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: worldweaver-frontend
+    restart: unless-stopped
+    environment:
+      - BACKEND_HOST=worldweaver-backend
+    ports:
+      - "80:80"
+    depends_on:
+      worldweaver-backend:
+        condition: service_healthy
+    networks:
+      - worldweaver
+
+volumes:
+  world-data:
+
+networks:
+  worldweaver:
+    driver: bridge
