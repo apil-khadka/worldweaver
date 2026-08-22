@@ -21,18 +21,20 @@ type Hub struct {
 	mu      sync.RWMutex
 	clients map[*Client]struct{}
 
-	world   *world.World
-	engine  *simulation.Engine
-	metrics *metrics.Metrics
+	world       *world.World
+	engine      *simulation.Engine
+	metrics     *metrics.Metrics
+	connLimiter *ConnRateLimiter
 }
 
 // NewHub creates a Hub wired to the given world and engine.
 func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics) *Hub {
 	return &Hub{
-		clients: make(map[*Client]struct{}),
-		world:   w,
-		engine:  eng,
-		metrics: m,
+		clients:     make(map[*Client]struct{}),
+		world:       w,
+		engine:      eng,
+		metrics:     m,
+		connLimiter: NewConnRateLimiter(),
 	}
 }
 
@@ -42,6 +44,7 @@ func (h *Hub) register(c *Client) {
 	h.mu.Unlock()
 	h.metrics.PlayerCount.Add(1)
 	log.Printf("hub: player %d registered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
+	h.BroadcastPlayerJoin(c.Player.ID)
 }
 
 func (h *Hub) unregister(c *Client) {
@@ -51,6 +54,7 @@ func (h *Hub) unregister(c *Client) {
 	close(c.send)
 	h.metrics.PlayerCount.Add(-1)
 	log.Printf("hub: player %d unregistered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
+	h.BroadcastPlayerLeave(c.Player.ID)
 }
 
 // handlePowerInput validates an incoming power request and enqueues it on
@@ -94,4 +98,49 @@ func (h *Hub) PlayerCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
+}
+
+// handleCursorMove broadcasts a player's cursor position to all other clients.
+func (h *Hub) handleCursorMove(sender *Client, msg *CursorMsg) {
+	update := mustMarshal(CursorUpdateMsg{
+		Type:     MsgCursorUpdate,
+		PlayerID: sender.Player.ID,
+		X:        msg.X,
+		Y:        msg.Y,
+		Power:    msg.Power,
+	})
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		if c != sender {
+			c.sendRaw(update)
+		}
+	}
+}
+
+// BroadcastPlayerJoin notifies all connected clients that a new player joined.
+func (h *Hub) BroadcastPlayerJoin(playerID uint32) {
+	msg := mustMarshal(PlayerJoinMsg{
+		Type:     MsgPlayerJoin,
+		PlayerID: playerID,
+	})
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.sendRaw(msg)
+	}
+}
+
+// BroadcastPlayerLeave notifies all connected clients that a player left.
+func (h *Hub) BroadcastPlayerLeave(playerID uint32) {
+	msg := mustMarshal(PlayerLeaveMsg{
+		Type:     MsgPlayerLeave,
+		PlayerID: playerID,
+	})
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.sendRaw(msg)
+	}
 }

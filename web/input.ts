@@ -27,6 +27,8 @@ export class InputHandler {
   private lastPowerY = 0;
   private panKeys = new Set<string>();
   private panLoop: ReturnType<typeof setInterval> | null = null;
+  private lastCursorSend = 0;
+  private readonly CURSOR_THROTTLE_MS = 100; // 10Hz
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -84,6 +86,13 @@ export class InputHandler {
   }
 
   private onMouseMove(e: MouseEvent): void {
+    // Send cursor position for multiplayer presence (throttled)
+    const now = Date.now();
+    if (now - this.lastCursorSend > this.CURSOR_THROTTLE_MS) {
+      const [wx, wy] = this.screenToWorld(e.clientX, e.clientY);
+      this.network.sendCursor(wx, wy, this.network.activePower);
+      this.lastCursorSend = now;
+    }
     if (!this.applying) return;
     this.applyPowerAt(e.clientX, e.clientY);
   }

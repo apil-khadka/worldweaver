@@ -13,7 +13,11 @@
  * It never touches world state directly.
  */
 
-import { WorldNetwork, MetricsData, PlayerState } from "./network.js";
+import { WorldNetwork, MetricsData, PlayerState, RemoteCursor } from "./network.js";
+
+// Power colors for cursor rendering
+const POWER_COLORS = ["#4da8ff", "#ff6b35", "#88cc44", "#44ddaa"];
+const POWER_NAMES  = ["Rain", "Heat", "Wind", "Growth"];
 
 // DOM references resolved once at attach time
 let elBadge:      HTMLElement;
@@ -31,6 +35,7 @@ let elFtActive: HTMLElement;
 let elFtChunks: HTMLElement;
 let elFtNet:    HTMLElement;
 let elFtRtt:    HTMLElement;
+let elCanvasWrapper: HTMLElement;
 
 function q(id: string): HTMLElement {
   return document.getElementById(id)!;
@@ -38,6 +43,7 @@ function q(id: string): HTMLElement {
 
 export class UIController {
   private rttInterval: ReturnType<typeof setInterval> | null = null;
+  private cursors = new Map<number, { el: HTMLElement; timeout: ReturnType<typeof setTimeout> }>();
 
   constructor(private readonly network: WorldNetwork) {}
 
@@ -57,6 +63,7 @@ export class UIController {
     elFtChunks = q("ft-chunks");
     elFtNet    = q("ft-net");
     elFtRtt    = q("ft-rtt");
+    elCanvasWrapper = q("canvas-wrapper");
 
     this.network.callbacks = {
       onConnected:    () => this.onConnected(),
@@ -64,6 +71,9 @@ export class UIController {
       onMetrics:      (m) => this.onMetrics(m),
       onPlayerState:  (s) => this.onPlayerState(s),
       onError:        (msg) => console.warn("[ui] server error:", msg),
+      onCursorUpdate: (c) => this.onCursorUpdate(c),
+      onPlayerJoin:   (id) => this.showToast(`Player ${id} joined the world`, "join"),
+      onPlayerLeave:  (id) => this.removeCursor(id),
     };
 
     this.showStatus("Connecting to world…", "");
@@ -117,6 +127,70 @@ export class UIController {
 
   private hideStatus(): void {
     elStatusOverlay.classList.remove("visible");
+  }
+
+  // ── Multiplayer Cursors ──────────────────────────────────────────────────
+  private onCursorUpdate(cursor: RemoteCursor): void {
+    let entry = this.cursors.get(cursor.playerID);
+
+    if (!entry) {
+      // Create a new cursor element
+      const el = document.createElement("div");
+      el.className = "remote-cursor";
+      el.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M1 1L6 14L8 8L14 6L1 1Z" fill="currentColor" stroke="rgba(0,0,0,0.3)" stroke-width="0.5"/>
+        </svg>
+        <span class="cursor-label">P${cursor.playerID}</span>
+      `;
+      elCanvasWrapper.appendChild(el);
+      entry = { el, timeout: setTimeout(() => this.removeCursor(cursor.playerID), 5000) };
+      this.cursors.set(cursor.playerID, entry);
+    }
+
+    // Update position (world coords → screen coords)
+    const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
+    const sx = cursor.x - (this.network.worldW > 0 ? 0 : 0); // viewX is on renderer
+    // We approximate screen position. The renderer's viewX/viewY offset is the viewport origin.
+    // Since we can't directly access renderer here, we use a data attribute set by main.ts
+    const viewX = parseInt(canvas.dataset["viewX"] ?? "0", 10);
+    const viewY = parseInt(canvas.dataset["viewY"] ?? "0", 10);
+    const screenX = cursor.x - viewX;
+    const screenY = cursor.y - viewY;
+
+    const color = POWER_COLORS[cursor.power] ?? POWER_COLORS[0];
+    entry.el.style.left = `${screenX}px`;
+    entry.el.style.top  = `${screenY}px`;
+    entry.el.style.color = color;
+    entry.el.style.display = (screenX >= 0 && screenY >= 0) ? "block" : "none";
+
+    // Reset timeout
+    clearTimeout(entry.timeout);
+    entry.timeout = setTimeout(() => this.removeCursor(cursor.playerID), 5000);
+  }
+
+  private removeCursor(playerID: number): void {
+    const entry = this.cursors.get(playerID);
+    if (entry) {
+      entry.el.remove();
+      clearTimeout(entry.timeout);
+      this.cursors.delete(playerID);
+    }
+    this.showToast(`Player ${playerID} left`, "leave");
+  }
+
+  // ── Toast Notifications ──────────────────────────────────────────────────
+  private showToast(message: string, type: "join" | "leave"): void {
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    // Trigger animation
+    requestAnimationFrame(() => toast.classList.add("visible"));
+    setTimeout(() => {
+      toast.classList.remove("visible");
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
 }
 

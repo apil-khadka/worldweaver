@@ -25,6 +25,11 @@ const enum Mat {
   Fire  = 6,
   Vapor = 7,
   Smoke = 8,
+  Lava  = 9,
+  Ice   = 10,
+  Ash   = 11,
+  Oil   = 12,
+  Ember = 13,
 }
 
 /** RGBA palette for each material ID. Index = mat * 4, layout = [r, g, b, a] */
@@ -38,6 +43,11 @@ const PALETTE = new Uint8Array([
   /* Fire  */ 240, 100, 20,  255,
   /* Vapor */ 180, 210, 240, 120,
   /* Smoke */ 80,  80,  80,  160,
+  /* Lava  */ 255, 80,  0,   255,
+  /* Ice   */ 180, 230, 255, 255,
+  /* Ash   */ 50,  45,  40,  200,
+  /* Oil   */ 80,  60,  20,  255,
+  /* Ember */ 200, 50,  10,  180,
 ]);
 
 export interface ChunkUpdate {

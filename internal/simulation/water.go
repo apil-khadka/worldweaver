@@ -4,17 +4,39 @@ import "github.com/worldweaver/worldweaver/internal/world"
 
 // simulateWater implements liquid behavior:
 //  1. Fall down if empty below
-//  2. Diagonal fall
-//  3. Lateral spread (up to 4 cells per tick)
-//  4. Wet adjacent soil
-//  5. Extinguish adjacent fire
+//  2. Displace oil (water is denser, sinks below oil)
+//  3. Diagonal fall
+//  4. Lateral spread (up to 4 cells per tick)
+//  5. Wet adjacent soil
+//  6. Extinguish adjacent fire
+//  7. Freeze near ice at low temperature
 func simulateWater(w *world.World, x, y int) {
+	i := w.Index(x, y)
+	if i < 0 {
+		return
+	}
+
+	// Freeze if temperature is very low (near ice)
+	if w.Temperature[i] < -50 {
+		if w.RNG().Intn(100) == 0 {
+			w.SetMaterial(x, y, world.MatIce)
+			return
+		}
+	}
+
 	// Fall down
 	below := w.GetMaterial(x, y+1)
 	if below == world.MatEmpty {
 		w.Swap(x, y, x, y+1)
 		markMoved(w, x, y+1)
 		wetSoilAround(w, x, y+1)
+		return
+	}
+
+	// Water is denser than oil — displace oil below (water sinks, oil floats up)
+	if below == world.MatOil {
+		w.Swap(x, y, x, y+1)
+		markMoved(w, x, y+1)
 		return
 	}
 
@@ -77,10 +99,17 @@ func simulateWater(w *world.World, x, y int) {
 }
 
 func tryDiagWater(w *world.World, x, y, dx int) bool {
-	if w.GetMaterial(x+dx, y+1) == world.MatEmpty {
+	m := w.GetMaterial(x+dx, y+1)
+	if m == world.MatEmpty {
 		w.Swap(x, y, x+dx, y+1)
 		markMoved(w, x+dx, y+1)
 		wetSoilAround(w, x+dx, y+1)
+		return true
+	}
+	// Also displace oil diagonally
+	if m == world.MatOil {
+		w.Swap(x, y, x+dx, y+1)
+		markMoved(w, x+dx, y+1)
 		return true
 	}
 	return false

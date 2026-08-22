@@ -24,7 +24,9 @@ func TestMaterialIDsAreUnique(t *testing.T) {
 		{materials.Soil, "Soil"}, {materials.Sand, "Sand"},
 		{materials.Water, "Water"}, {materials.Plant, "Plant"},
 		{materials.Fire, "Fire"}, {materials.Vapor, "Vapor"},
-		{materials.Smoke, "Smoke"},
+		{materials.Smoke, "Smoke"}, {materials.Lava, "Lava"},
+		{materials.Ice, "Ice"}, {materials.Ash, "Ash"},
+		{materials.Oil, "Oil"}, {materials.Ember, "Ember"},
 	}
 	for _, m := range list {
 		if prev, ok := seen[m.id]; ok {
@@ -137,6 +139,122 @@ func TestWaterExtinguishesFire(t *testing.T) {
 	}
 }
 
+// ── Oil floats on water ──────────────────────────────────────────────────────
+
+func TestOilFloatsOnWater(t *testing.T) {
+	w := world.New(10, 20, 42)
+	// Rock floor
+	for x := range 10 {
+		w.Material[19*10+x] = materials.Rock
+	}
+	// Place water at row 18, oil at row 17 (oil on top of water)
+	w.Material[18*10+5] = materials.Water
+	w.Material[17*10+5] = materials.Oil
+
+	m := metrics.New()
+	eng := simulation.NewEngine(w, m)
+	for range 30 {
+		eng.TickOnce()
+	}
+
+	// After settling, oil should be above water (lower row index = higher position)
+	// Find the oil and water in column 5
+	oilRow := -1
+	waterRow := -1
+	for y := 0; y < 20; y++ {
+		mat := w.Material[y*10+5]
+		if mat == materials.Oil && oilRow == -1 {
+			oilRow = y
+		}
+		if mat == materials.Water && waterRow == -1 {
+			waterRow = y
+		}
+	}
+	if oilRow >= 0 && waterRow >= 0 && oilRow > waterRow {
+		t.Errorf("oil (row %d) should float above water (row %d)", oilRow, waterRow)
+	}
+}
+
+// ── Lava converts water to steam ──────────────────────────────────────────────
+
+func TestLavaConvertsWaterToSteam(t *testing.T) {
+	w := world.New(10, 10, 42)
+	// Place lava with water adjacent
+	w.Material[5*10+5] = materials.Lava
+	w.Lifetime[5*10+5] = 400
+	w.Material[5*10+6] = materials.Water
+
+	m := metrics.New()
+	eng := simulation.NewEngine(w, m)
+	for range 20 {
+		eng.TickOnce()
+	}
+
+	// Water should be gone (converted to vapor or displaced)
+	waterStillThere := false
+	for i := range w.Material {
+		if w.Material[i] == materials.Water {
+			waterStillThere = true
+			break
+		}
+	}
+	// Check that vapor appeared somewhere
+	vaporFound := false
+	rockFound := false
+	for i := range w.Material {
+		if w.Material[i] == materials.Vapor {
+			vaporFound = true
+		}
+		if w.Material[i] == materials.Rock {
+			rockFound = true
+		}
+	}
+	if waterStillThere && !vaporFound && !rockFound {
+		t.Error("lava touching water should produce vapor or rock")
+	}
+}
+
+// ── Ice melts near fire ──────────────────────────────────────────────────────
+
+func TestIceMeltsNearFire(t *testing.T) {
+	w := world.New(10, 10, 42)
+	w.Material[5*10+5] = materials.Ice
+	w.Material[5*10+6] = materials.Fire
+	w.Lifetime[5*10+6] = 100
+
+	m := metrics.New()
+	eng := simulation.NewEngine(w, m)
+	for range 10 {
+		eng.TickOnce()
+	}
+
+	// Ice should have melted to water
+	if w.Material[5*10+5] == materials.Ice {
+		t.Error("ice should melt when adjacent to fire")
+	}
+}
+
+// ── Lava ignites plants ──────────────────────────────────────────────────────
+
+func TestLavaIgnitesPlant(t *testing.T) {
+	w := world.New(10, 10, 42)
+	// Lava next to plant
+	w.Material[5*10+5] = materials.Lava
+	w.Lifetime[5*10+5] = 400
+	w.Material[5*10+4] = materials.Plant
+
+	m := metrics.New()
+	eng := simulation.NewEngine(w, m)
+	for range 30 {
+		eng.TickOnce()
+	}
+
+	// Plant should have caught fire or been destroyed
+	if w.Material[5*10+4] == materials.Plant {
+		t.Error("lava should ignite adjacent plants")
+	}
+}
+
 // ── World generation produces a non-empty world ──────────────────────────────
 
 func TestWorldGenerateProducesContent(t *testing.T) {
@@ -168,5 +286,24 @@ func TestSetGetMaterial(t *testing.T) {
 	w.SetMaterial(10, 10, materials.Water)
 	if got := w.GetMaterial(10, 10); got != materials.Water {
 		t.Errorf("GetMaterial(10,10) = %d, want %d (Water)", got, materials.Water)
+	}
+}
+
+// ── New materials exist in registry ────────────────────────────────────────
+
+func TestNewMaterialsInRegistry(t *testing.T) {
+	cases := []struct {
+		id   uint8
+		name string
+	}{
+		{materials.Ice, "ice"},
+		{materials.Oil, "oil"},
+		{materials.Lava, "lava"},
+	}
+	for _, tc := range cases {
+		def := materials.R.Get(tc.id)
+		if def.Name != tc.name {
+			t.Errorf("materials.R.Get(%d).Name = %q, want %q", tc.id, def.Name, tc.name)
+		}
 	}
 }

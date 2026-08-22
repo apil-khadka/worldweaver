@@ -23,20 +23,22 @@ const (
 
 // Client represents a single connected browser.
 type Client struct {
-	Player *game.Player
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
+	Player  *game.Player
+	hub     *Hub
+	conn    *websocket.Conn
+	send    chan []byte
+	limiter *ClientRateLimiter
 }
 
 // newClient constructs a Client and immediately starts its write pump.
 func newClient(hub *Hub, conn *websocket.Conn) *Client {
 	p := game.NewPlayer()
 	c := &Client{
-		Player: p,
-		hub:    hub,
-		conn:   conn,
-		send:   make(chan []byte, writeQueueDepth),
+		Player:  p,
+		hub:     hub,
+		conn:    conn,
+		send:    make(chan []byte, writeQueueDepth),
+		limiter: NewClientRateLimiter(),
 	}
 	return c
 }
@@ -75,6 +77,12 @@ func (c *Client) readPump(ctx context.Context) {
 			return
 		}
 
+		// Per-client message rate limit (30 msg/s, 1s cooldown on breach).
+		if !c.limiter.AllowMessage() {
+			c.sendError("rate limited: too many messages")
+			continue
+		}
+
 		var env InboundEnvelope
 		if err := json.Unmarshal(data, &env); err != nil {
 			c.sendError("malformed JSON")
@@ -89,6 +97,11 @@ func (c *Client) readPump(ctx context.Context) {
 			}
 
 		case MsgPowerInput:
+			// Per-client power rate limit (10 actions/s).
+			if !c.limiter.AllowPower() {
+				c.sendError("rate limited: too many power actions")
+				continue
+			}
 			var msg PowerInputMsg
 			if err := json.Unmarshal(data, &msg); err != nil {
 				c.sendError("malformed power message")
@@ -104,6 +117,12 @@ func (c *Client) readPump(ctx context.Context) {
 
 		case MsgPing:
 			c.sendRaw(mustMarshal(map[string]string{"type": MsgPong}))
+
+		case MsgCursor:
+			var msg CursorMsg
+			if err := json.Unmarshal(data, &msg); err == nil {
+				c.hub.handleCursorMove(c, &msg)
+			}
 
 		default:
 			c.sendError("unknown message type")

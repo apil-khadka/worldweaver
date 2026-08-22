@@ -11,6 +11,11 @@ const (
 	MatFire               // 6
 	MatVapor              // 7
 	MatSmoke              // 8
+	MatLava               // 9
+	MatIce                // 10
+	MatAsh                // 11
+	MatOil                // 12
+	MatEmber              // 13
 )
 
 // MaterialName returns a human-readable name for debug/serialization.
@@ -34,6 +39,16 @@ func MaterialName(m uint8) string {
 		return "vapor"
 	case MatSmoke:
 		return "smoke"
+	case MatLava:
+		return "lava"
+	case MatIce:
+		return "ice"
+	case MatAsh:
+		return "ash"
+	case MatOil:
+		return "oil"
+	case MatEmber:
+		return "ember"
 	default:
 		return "unknown"
 	}
@@ -42,7 +57,7 @@ func MaterialName(m uint8) string {
 // IsSolid returns true for materials that block downward movement.
 func IsSolid(m uint8) bool {
 	switch m {
-	case MatRock, MatSoil, MatSand, MatPlant:
+	case MatRock, MatSoil, MatSand, MatPlant, MatIce:
 		return true
 	}
 	return false
@@ -50,10 +65,45 @@ func IsSolid(m uint8) bool {
 
 // IsFlammable returns true for materials that can catch fire.
 func IsFlammable(m uint8) bool {
-	return m == MatPlant
+	return m == MatPlant || m == MatOil
+}
+
+// IsLiquid returns true for materials that flow laterally.
+func IsLiquid(m uint8) bool {
+	return m == MatWater || m == MatOil || m == MatLava
+}
+
+// IsGas returns true for materials that rise upward.
+func IsGas(m uint8) bool {
+	return m == MatVapor || m == MatSmoke || m == MatEmpty
 }
 
 // IsTransient returns true for materials with a finite lifetime.
 func IsTransient(m uint8) bool {
-	return m == MatFire || m == MatVapor || m == MatSmoke
+	return m == MatFire || m == MatVapor || m == MatSmoke || m == MatEmber
+}
+
+// Density returns a relative density value for liquid displacement.
+// Higher values sink below lower values.
+func Density(m uint8) uint8 {
+	switch m {
+	case MatEmpty:
+		return 0
+	case MatVapor, MatSmoke:
+		return 5
+	case MatOil:
+		return 60
+	case MatWater:
+		return 80
+	case MatIce:
+		return 90
+	case MatSand:
+		return 120
+	case MatSoil:
+		return 150
+	case MatRock, MatLava:
+		return 200
+	default:
+		return 50
+	}
 }

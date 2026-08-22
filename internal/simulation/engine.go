@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	TargetTPS       = 60
-	TickInterval    = time.Second / TargetTPS
+	TargetTPS    = 60
+	TickInterval = time.Second / TargetTPS
 )
 
 // Engine owns the simulation loop.
@@ -53,10 +53,21 @@ func (e *Engine) Stop() {
 }
 
 // EnqueueAction safely adds a player action to be processed on the next tick.
+// Wakes the target chunk and its neighbors to ensure the action takes effect.
 func (e *Engine) EnqueueAction(a PlayerAction) {
 	e.actionMu.Lock()
 	e.actions = append(e.actions, a)
 	e.actionMu.Unlock()
+
+	// Wake the chunk(s) affected by this action so they are simulated.
+	w := e.world
+	w.WakeChunkAt(a.X, a.Y)
+	// Also wake chunks covered by the action radius.
+	for _, dy := range []int{-a.Radius, 0, a.Radius} {
+		for _, dx := range []int{-a.Radius, 0, a.Radius} {
+			w.WakeChunkAt(a.X+dx, a.Y+dy)
+		}
+	}
 }
 
 func (e *Engine) loop() {
@@ -86,24 +97,64 @@ func (e *Engine) tick() {
 	w := e.world
 	w.ClearMoveFlags()
 
-	// Apply player actions
+	// Apply player actions (these already woke chunks in EnqueueAction)
 	for _, a := range actions {
 		applyAction(w, a)
 	}
 
-	// Advance simulation — bottom-to-top, alternating horizontal direction
+	// Advance simulation chunk-by-chunk, skipping sleeping chunks.
+	// Within each active chunk: bottom-to-top, alternating horizontal direction.
 	leftToRight := w.Tick%2 == 0
-	for y := w.Height - 1; y >= 0; y-- {
-		if leftToRight {
-			for x := range w.Width {
-				simulateCell(w, x, y)
+	chunkSize := w.ChunkSize
+
+	for cy := w.ChunkH - 1; cy >= 0; cy-- {
+		for cx := range w.ChunkW {
+			idx := cy*w.ChunkW + cx
+			chunk := &w.Chunks[idx]
+
+			// Skip sleeping chunks — the core optimization.
+			if chunk.Sleeping {
+				continue
 			}
-		} else {
-			for x := w.Width - 1; x >= 0; x-- {
-				simulateCell(w, x, y)
+
+			// Determine cell bounds for this chunk (clamped to world edges).
+			startX := cx * chunkSize
+			startY := cy * chunkSize
+			endX := startX + chunkSize
+			endY := startY + chunkSize
+			if endX > w.Width {
+				endX = w.Width
+			}
+			if endY > w.Height {
+				endY = w.Height
+			}
+
+			// Simulate cells within this chunk: bottom-to-top.
+			for y := endY - 1; y >= startY; y-- {
+				if leftToRight {
+					for x := startX; x < endX; x++ {
+						simulateCell(w, x, y)
+					}
+				} else {
+					for x := endX - 1; x >= startX; x-- {
+						simulateCell(w, x, y)
+					}
+				}
+			}
+
+			// If this chunk had changes, wake its neighbors so they
+			// react to cross-boundary effects (falling sand, spreading fire).
+			if chunk.ChangedThisTick {
+				w.WakeNeighbors(cx, cy)
 			}
 		}
 	}
+
+	// Environmental pass — only on active chunks.
+	updateEnvironmentChunked(w)
+
+	// Update sleep states at end of tick.
+	w.UpdateSleepStates()
 
 	w.Tick++
 	elapsed := time.Since(start)

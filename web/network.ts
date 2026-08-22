@@ -32,6 +32,14 @@ export interface PlayerState {
   maxInfluence: number;
 }
 
+export interface RemoteCursor {
+  playerID: number;
+  x:        number;
+  y:        number;
+  power:    number;
+  lastSeen: number;
+}
+
 /** Callbacks that other modules register to receive network events. */
 export interface NetworkCallbacks {
   onConnected?():          void;
@@ -39,6 +47,9 @@ export interface NetworkCallbacks {
   onMetrics?(m: MetricsData): void;
   onPlayerState?(s: PlayerState): void;
   onError?(msg: string):   void;
+  onCursorUpdate?(cursor: RemoteCursor): void;
+  onPlayerJoin?(playerID: number): void;
+  onPlayerLeave?(playerID: number): void;
 }
 
 export class WorldNetwork {
@@ -167,6 +178,26 @@ export class WorldNetwork {
         this.lastRttMs = Date.now() - this.pingSentAt;
         break;
 
+      case "cursor_update": {
+        const cursor: RemoteCursor = {
+          playerID: msg["playerID"] as number,
+          x:        msg["x"] as number,
+          y:        msg["y"] as number,
+          power:    msg["power"] as number,
+          lastSeen: Date.now(),
+        };
+        this.callbacks.onCursorUpdate?.(cursor);
+        break;
+      }
+
+      case "player_join":
+        this.callbacks.onPlayerJoin?.(msg["playerID"] as number);
+        break;
+
+      case "player_leave":
+        this.callbacks.onPlayerLeave?.(msg["playerID"] as number);
+        break;
+
       case "error":
         console.warn("[network] server error:", msg["message"]);
         this.callbacks.onError?.(msg["message"] as string);
@@ -195,6 +226,11 @@ export class WorldNetwork {
   /** Notify the server of a camera move so it streams the right chunks. */
   sendViewport(x: number, y: number, w: number, h: number): void {
     this.send({ type: "viewport", x, y, w, h });
+  }
+
+  /** Send cursor position to server for multiplayer presence (throttled externally). */
+  sendCursor(x: number, y: number, power: number): void {
+    this.send({ type: "cursor", x: Math.round(x), y: Math.round(y), power });
   }
 
   private send(msg: unknown): void {

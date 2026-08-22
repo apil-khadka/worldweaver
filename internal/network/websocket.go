@@ -72,6 +72,17 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 // handleWebSocket upgrades an HTTP connection to WebSocket and registers
 // the resulting client with the hub.
 func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Connection rate limit: max 20 new connections/minute per IP.
+	ip := r.RemoteAddr
+	// Use X-Real-IP if available (set by chi middleware.RealIP).
+	if realIP := r.Header.Get("X-Real-Ip"); realIP != "" {
+		ip = realIP
+	}
+	if !h.connLimiter.AllowConnection(ip) {
+		http.Error(w, "too many connections", http.StatusTooManyRequests)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// Allow all origins during development / demo.
 		// Restrict to the deployment domain in production.

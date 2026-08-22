@@ -27,6 +27,12 @@ func simulateCell(w *world.World, x, y int) {
 		simulateVapor(w, x, y)
 	case world.MatSmoke:
 		simulateSmoke(w, x, y)
+	case world.MatIce:
+		simulateIce(w, x, y)
+	case world.MatOil:
+		simulateOil(w, x, y)
+	case world.MatLava:
+		simulateLava(w, x, y)
 	}
 }
 

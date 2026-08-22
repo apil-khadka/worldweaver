@@ -30,6 +30,7 @@ const (
 	MsgPowerInput = "power"
 	MsgViewport   = "viewport"
 	MsgPing       = "ping"
+	MsgCursor     = "cursor"
 )
 
 // Outbound message types (server → client)
@@ -41,6 +42,9 @@ const (
 	MsgWorldMetrics  = "world_metrics"
 	MsgError         = "error"
 	MsgPong          = "pong"
+	MsgCursorUpdate  = "cursor_update"
+	MsgPlayerJoin    = "player_join"
+	MsgPlayerLeave   = "player_leave"
 )
 
 // ---- Inbound message structs ----
@@ -141,4 +145,35 @@ type WorldMetricsMsg struct {
 type ErrorMsg struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+// ---- Cursor & Presence messages ----
+
+// CursorMsg is sent by a client to report its cursor position in world coordinates.
+type CursorMsg struct {
+	Type  string `json:"type"`
+	X     int    `json:"x"`
+	Y     int    `json:"y"`
+	Power uint8  `json:"power"` // currently selected power (for cursor color)
+}
+
+// CursorUpdateMsg is broadcast to all OTHER clients with another player's cursor position.
+type CursorUpdateMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	Power    uint8  `json:"power"`
+}
+
+// PlayerJoinMsg is broadcast when a new player connects.
+type PlayerJoinMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+}
+
+// PlayerLeaveMsg is broadcast when a player disconnects.
+type PlayerLeaveMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
 }

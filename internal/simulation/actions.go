@@ -26,6 +26,7 @@ type PlayerAction struct {
 }
 
 // applyAction applies the given player action to the world.
+// It also marks affected chunks as changed to prevent them from sleeping.
 func applyAction(w *world.World, a PlayerAction) {
 	r2 := a.Radius * a.Radius
 	for dy := -a.Radius; dy <= a.Radius; dy++ {
@@ -38,6 +39,8 @@ func applyAction(w *world.World, a PlayerAction) {
 			if i < 0 {
 				continue
 			}
+			// Mark the chunk as changed so it stays awake.
+			w.MarkDirty(x, y)
 			switch a.Power {
 			case PowerRain:
 				applyRain(w, x, y, i, a.Intensity)
@@ -85,10 +88,10 @@ func applyGrowth(w *world.World, x, y, i int, intensity float32) {
 	}
 }
 
-// applyWind nudges sand and smoke horizontally.
+// applyWind nudges sand, smoke, and lighter materials horizontally.
 func applyWind(w *world.World, x, y, i int, intensity float32) {
 	mat := w.Material[i]
-	if mat == world.MatSand || mat == world.MatSmoke {
+	if mat == world.MatSand || mat == world.MatSmoke || mat == world.MatVapor || mat == world.MatEmber {
 		dx := 1
 		if intensity < 0 {
 			dx = -1
