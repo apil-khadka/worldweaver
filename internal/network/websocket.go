@@ -32,6 +32,22 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	// Static frontend
 	r.Handle("/*", http.FileServer(staticFS))
 
+	// Root API info
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"name":    "WorldWeaver API",
+			"version": "0.1.0",
+			"status":  "running",
+			"docs":    "Multiplayer emergent world simulation server",
+			"endpoints": map[string]string{
+				"ws":      "/ws",
+				"health":  "/health",
+				"metrics": "/api/metrics",
+			},
+		})
+	})
+
 	// WebSocket endpoint
 	r.Get("/ws", hub.handleWebSocket)
 
