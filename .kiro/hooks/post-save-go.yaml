@@ -1,0 +1,10 @@
+name: go-fmt-vet
+description: Run gofmt and go vet after saving any Go file
+trigger:
+  type: file_save
+  pattern: "**/*.go"
+action:
+  type: shell
+  commands:
+    - gofmt -w $FILE
+    - go vet ./...

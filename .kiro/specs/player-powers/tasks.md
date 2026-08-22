@@ -1,0 +1,21 @@
+# Player Powers — Tasks
+
+- [x] Define PowerID constants (Rain=1, Heat=2, Wind=3, Growth=4)
+- [x] Create PlayerAction struct with PlayerID, Power, X, Y fields
+- [x] Create PlayerState struct with ID, Influence, Active, CursorX, CursorY
+- [x] Implement power definitions table (radius, cost, effect per power)
+- [x] Implement applyPower() with circular radius iteration
+- [x] Implement Rain effect: increase moisture, decrease temperature within radius
+- [x] Implement Heat effect: increase temperature within radius
+- [x] Implement Wind effect: set horizontal displacement flag within radius
+- [x] Implement Growth effect: convert Soil→Plant when moisture > threshold
+- [x] Implement influence budget consumption per tick of active power
+- [x] Implement influence regeneration when no power active (+10/sec)
+- [x] Clamp influence to [0, 1000]
+- [x] Add server-side validation in client read pump (power ID, bounds, budget)
+- [x] Send ERROR message on invalid power request
+- [x] Wire action queue drain into engine tick (before material sim)
+- [x] Broadcast PLAYER_STATE (cursor + active power) to all clients
+- [ ] Add power cooldown (minimum ticks between activations)
+- [ ] Visual feedback: send power-effect overlay data to clients
+- [ ] Balance pass: tune radius/cost values based on playtest feedback

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WorldWeaver — One World. Many Forces.</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #0d0d0f;
+      --panel:  #161820;
+      --border: #2a2d3a;
+      --text:   #c8ccd8;
+      --muted:  #5a5e6e;
+      --accent: #4da8ff;
+      --danger: #ff4d4d;
+      --good:   #4dff88;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #header .logo {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    #header .meta {
+      display: flex;
+      gap: 18px;
+      color: var(--muted);
+    }
+    #header .meta span b { color: var(--text); }
+
+    /* ── Power bar ───────────────────────────────────────── */
+    #powerbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .power-btn {
+      padding: 4px 14px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .power-btn:hover  { background: #ffffff10; }
+    .power-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    #influence-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    #influence-track {
+      width: 140px;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #influence-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 100%;
+      transition: width 0.2s;
+      border-radius: 4px;
+    }
+
+    /* ── Canvas area ─────────────────────────────────────── */
+    #canvas-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #world-canvas {
+      display: block;
+      cursor: crosshair;
+      image-rendering: pixelated;
+    }
+
+    /* ── Status overlay ──────────────────────────────────── */
+    #status-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #000000cc;
+      padding: 20px 32px;
+      border-radius: 8px;
+      text-align: center;
+      display: none;
+    }
+    #status-overlay.visible { display: block; }
+    #status-overlay .status-title {
+      font-size: 16px;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    /* ── Footer metrics ──────────────────────────────────── */
+    #footer {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      padding: 4px 14px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    #footer span b { color: var(--text); }
+    .metric-good { color: var(--good); }
+    .metric-bad  { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div id="header">
+    <span class="logo">⬛ WORLDWEAVER</span>
+    <div class="meta">
+      <span>Stability: <b id="hdr-stability">–</b></span>
+      <span>Players: <b id="hdr-players">–</b></span>
+      <span id="connection-badge">⚪ Connecting…</span>
+    </div>
+  </div>
+
+  <!-- Power selection + influence -->
+  <div id="powerbar">
+    <button class="power-btn active" data-power="0" title="Rain (2/s)">🌧 Rain</button>
+    <button class="power-btn"        data-power="1" title="Heat (3/s)">🔥 Heat</button>
+    <button class="power-btn"        data-power="2" title="Wind (1/s)">💨 Wind</button>
+    <button class="power-btn"        data-power="3" title="Growth (4/s)">🌱 Growth</button>
+
+    <div id="influence-bar">
+      <span>Influence</span>
+      <div id="influence-track"><div id="influence-fill"></div></div>
+      <span id="influence-value">100</span>
+    </div>
+  </div>
+
+  <!-- World canvas -->
+  <div id="canvas-wrapper">
+    <canvas id="world-canvas"></canvas>
+    <div id="status-overlay">
+      <div class="status-title" id="status-title">Connecting to world…</div>
+      <div id="status-body"></div>
+    </div>
+  </div>
+
+  <!-- Footer metrics -->
+  <div id="footer">
+    <span>TPS: <b id="ft-tps">–</b></span>
+    <span>Tick p95: <b id="ft-p95">–</b> ms</span>
+    <span>Cells: <b id="ft-cells">–</b></span>
+    <span>Active: <b id="ft-active">–</b></span>
+    <span>Chunks: <b id="ft-chunks">–</b></span>
+    <span>Net out: <b id="ft-net">–</b> KB/s</span>
+    <span>RTT: <b id="ft-rtt">–</b> ms</span>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

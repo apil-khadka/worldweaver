@@ -1,0 +1,9 @@
+name: run-tests
+description: Run Go test suite after completing simulation or protocol spec tasks
+trigger:
+  type: task_complete
+  spec_pattern: "simulation-*|multiplayer-*|material-*"
+action:
+  type: shell
+  commands:
+    - go test ./... -timeout 60s

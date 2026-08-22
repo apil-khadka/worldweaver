@@ -1,0 +1,9 @@
+name: benchmark-check
+description: Run simulation benchmarks after performance-related task completion (expensive — not after every save)
+trigger:
+  type: task_complete
+  spec_pattern: "performance-benchmark"
+action:
+  type: shell
+  commands:
+    - go test -bench=. -benchmem -timeout 120s ./benchmarks/...

@@ -1,0 +1,52 @@
+/**
+ * WorldWeaver Design System — CSS Custom Properties
+ * Material visual colours are in render/ — NOT here.
+ */
+:root {
+  --ww-bg: #0d1117;
+  --ww-bg-void: #080b0f;
+  --ww-surface: #161b22;
+  --ww-surface-raised: #1e2430;
+  --ww-border: #2a3140;
+  --ww-text: #e2e8f0;
+  --ww-text-secondary: #a0aec0;
+  --ww-text-muted: #718096;
+  --ww-accent: #4299e1;
+  --ww-accent-hover: #63b3ed;
+  --ww-accent-active: #3182ce;
+  --ww-success: #48bb78;
+  --ww-warning: #f6e05e;
+  --ww-danger: #f56565;
+  --ww-info: #4fd1c5;
+  --ww-power-rain: #63b3ed;
+  --ww-power-heat: #f6ad55;
+  --ww-power-wind: #a0aec0;
+  --ww-power-growth: #68d391;
+  --ww-space-1: 4px;
+  --ww-space-2: 8px;
+  --ww-space-3: 12px;
+  --ww-space-4: 16px;
+  --ww-space-6: 24px;
+  --ww-space-8: 32px;
+  --ww-font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --ww-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --ww-text-xs: 11px;
+  --ww-text-sm: 12px;
+  --ww-text-md: 13px;
+  --ww-text-base: 14px;
+  --ww-text-lg: 16px;
+  --ww-radius-sm: 4px;
+  --ww-radius-md: 6px;
+  --ww-radius-lg: 10px;
+  --ww-motion-fast: 80ms;
+  --ww-motion-normal: 160ms;
+  --ww-shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --ww-shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --ww-z-world: 0;
+  --ww-z-hud: 10;
+  --ww-z-modal: 200;
+  --ww-z-toast: 300;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --ww-motion-fast: 0ms; --ww-motion-normal: 0ms; }
+}

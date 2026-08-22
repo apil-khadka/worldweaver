@@ -1,0 +1,10 @@
+name: ts-typecheck
+description: Run TypeScript type checking after saving any .ts file
+trigger:
+  type: file_save
+  pattern: "**/*.ts"
+action:
+  type: shell
+  working_dir: web
+  commands:
+    - npx tsc --noEmit

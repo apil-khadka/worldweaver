@@ -1,0 +1,16 @@
+{
+  "name": "worldweaver-client",
+  "version": "0.1.0",
+  "description": "WorldWeaver browser client — thin renderer for the authoritative Go world server",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "vite": "5.4.2"
+  }
+}
