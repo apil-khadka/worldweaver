@@ -1,0 +1,1 @@
+WorldWeaver makes a computationally rich world feel lightweight and immediate. One server, many players, and emergent consequences from every action. The world is expensive. The client is cheap. WorldWeaver: one world, many forces, built with Kiro.

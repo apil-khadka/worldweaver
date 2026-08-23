@@ -1,0 +1,9 @@
+node_modules/
+build/raw-video/
+build/checks/
+build/*.webm
+build/*.png
+build/slides/
+build/audio/
+build/segments/
+build/concat.txt

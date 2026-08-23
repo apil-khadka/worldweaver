@@ -1,0 +1,1 @@
+What if players could shape one living world from any browser, while the browser itself did none of the heavy physics? This is WorldWeaver: a multiplayer emergent world simulation where players apply forces, and the world decides what happens next.

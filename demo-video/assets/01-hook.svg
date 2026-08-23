@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101827"/><stop offset="1" stop-color="#1c3141"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#8bd5ff" stop-opacity=".35"/><stop offset="1" stop-color="#8bd5ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="orb"><circle cx="1430" cy="510" r="310"/></clipPath>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <circle cx="1430" cy="510" r="520" fill="url(#glow)"/>
+  <g opacity=".18" stroke="#b9e7ff" stroke-width="2"><path d="M1120 510h620M1140 430h580M1140 590h580M1190 350h480M1190 670h480"/><path d="M1430 200v620M1350 220v580M1510 220v580M1270 270v480M1590 270v480"/></g>
+  <g clip-path="url(#orb)" opacity=".95"><rect x="1120" y="200" width="620" height="620" fill="#274858"/><path d="M1100 610 C1220 540 1260 650 1360 590 S1510 520 1600 590 S1710 650 1780 560 V850 H1100Z" fill="#567256"/><path d="M1100 710 C1240 640 1340 770 1450 690 S1630 680 1770 730 V850 H1100Z" fill="#876f4f"/><path d="M1110 600 C1250 570 1330 620 1410 600 S1600 550 1760 610" fill="none" stroke="#54b8e7" stroke-width="45" opacity=".9"/><circle cx="1320" cy="450" r="13" fill="#f2b84b"/><circle cx="1660" cy="390" r="9" fill="#75dc9b"/><circle cx="1510" cy="690" r="11" fill="#ff786a"/></g>
+  <circle cx="1430" cy="510" r="310" fill="none" stroke="#a7e2ff" stroke-opacity=".45" stroke-width="3"/>
+  <text x="120" y="180" fill="#9de5ff" font-family="SF Pro Text" font-size="24" font-weight="700" letter-spacing="5">READY · SPEC · SHIP HACKATHON</text>
+  <text x="120" y="470" fill="#ffffff" font-family="SF Pro Text" font-size="112" font-weight="800">WORLDWEAVER</text>
+  <text x="126" y="550" fill="#b9cfda" font-family="SF Pro Text" font-size="38">One world. Many forces. Emergent reality.</text>
+  <rect x="125" y="660" width="420" height="5" fill="#f0a83a"/><text x="125" y="735" fill="#dbe9ef" font-family="SF Pro Text" font-size="28">A multiplayer world simulation</text><text x="125" y="780" fill="#dbe9ef" font-family="SF Pro Text" font-size="28">where players shape physics, not scripts.</text>
+  <text x="125" y="925" fill="#7895a4" font-family="SF Pro Text" font-size="22" letter-spacing="2">BUILT WITH KIRO · GO · WEBSOCKETS · WEBGL2</text>
+</svg>

@@ -1,0 +1,1 @@
+The world is shared in real time. A second player can join, appear in the player count, and act on the same landscape. What one player changes, the other player sees immediately because the server is authoritative.
