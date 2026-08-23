@@ -1,5 +1,6 @@
 # Go
 /worldweaver
+/server
 *.exe
 *.test
 *.out
@@ -12,6 +13,7 @@ web/dist/
 # Snapshots
 *.snapshot
 *.snapshot.tmp
+*.snapshot.*.bak
 
 # IDE
 .idea/

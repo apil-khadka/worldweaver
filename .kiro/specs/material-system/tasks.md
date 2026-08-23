@@ -1,23 +1,22 @@
 # Material System — Tasks
 
-- [x] Create `internal/material/` package with registry.go
-- [x] Define Def struct with ID, Name, Density, Flammable, Corrodible, SpreadRate, Lifetime, VisualClass
-- [x] Implement Register() with duplicate-ID panic
-- [x] Implement Get(id) lookup
-- [x] Define material ID constants (MatEmpty through MatEmber)
-- [x] Register MatEmpty (air) — Density 0, VisualClass "none"
-- [x] Register MatSand — Density 200, VisualClass "powder"
-- [x] Register MatWater — Density 64, SpreadRate 4, VisualClass "liquid"
-- [x] Register MatStone — Density 255, VisualClass "solid"
-- [x] Register MatWood — Density 220, Flammable true, VisualClass "solid"
-- [x] Register MatFire — Density 0, Lifetime 120, VisualClass "fire"
-- [x] Register MatSmoke — Density 0, Lifetime 60, VisualClass "gas"
-- [x] Register MatSoil — Density 180, VisualClass "powder"
-- [x] Register MatPlant — Density 150, Flammable true, VisualClass "solid"
-- [x] Register MatSteam — Density 0, Lifetime 90, VisualClass "gas"
-- [x] Register MatEmber — Density 0, Lifetime 30, VisualClass "fire"
-- [x] Implement IsSolid(), IsLiquid(), IsGas(), IsFlammable() helpers
-- [x] Write TestNoDuplicateIDs — iterates registry, asserts no collisions
-- [x] Write TestAllMaterialsHaveVisualClass
+## Phase 1 — Core Materials
+
+- [x] Create `internal/world/materials.go` with material ID constants and helpers
+- [x] Define material ID constants: MatEmpty(0), MatRock(1), MatSoil(2), MatSand(3), MatWater(4), MatPlant(5), MatFire(6), MatVapor(7), MatSmoke(8), MatLava(9), MatIce(10), MatAsh(11), MatOil(12), MatEmber(13), MatHerbivore(14), MatPredator(15), MatCloud(16)
+- [x] Implement IsSolid(), IsLiquid(), IsGas(), IsFlammable(), IsTransient() helpers
+- [x] Implement Density() lookup for density-based displacement
+- [x] Implement MaterialName() for debug/logging
+- [x] Define client-side palette (17 materials with RGBA values in webgl2-renderer.ts)
+- [x] PixiJS renderer with custom GLSL filter for material → color mapping
+- [x] WebGL2 renderer shader with water shimmer, fire glow bleed, depth shading, per-cell noise
+- [x] Isometric renderer with per-material height values
 - [ ] Create MATERIALS.md changelog documenting all IDs and version introduced
-- [ ] Add material list sync message for client handshake
+- [ ] Add material list sync message for client handshake (currently hardcoded on both sides)
+
+## Notes
+
+- Material constants exist in two places: `internal/world/materials.go` (used by
+  the simulation) and `internal/systems/materials` (used by tests and the
+  generation sub-packages). Both compile; `go vet ./...` is clean. Consolidating
+  them onto one source of truth is worthwhile but is not a blocker.

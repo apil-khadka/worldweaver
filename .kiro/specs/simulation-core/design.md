@@ -22,17 +22,25 @@ Using ordered in-place simulation (not double-buffering) to minimise memory:
 
 `cell.go` contains a switch on material ID that calls the appropriate simulation function. Each material file (sand.go, water.go, fire.go, etc.) implements its own behaviour.
 
-## Multi-Rate Extension Point
+## Multi-Rate Scheduling (Implemented)
 
-The current implementation runs all systems at 60 Hz. The design allows wrapping system calls in rate dividers:
+The engine runs different subsystems at their natural frequencies via tick modulo:
 ```go
-if w.Tick % 2 == 0 { simulateFire(...) }    // 30 Hz
-if w.Tick % 12 == 0 { simulatePlants(...) }  // 5 Hz
+Materials:   60 Hz (every tick)
+Fire:        30 Hz (tick % 2 == 0)
+Plants:       5 Hz (tick % 12 == 0)
+Creatures:   10 Hz (tick % 6 == 0)
+Weather:      2 Hz (tick % 30 == 0)
 ```
 
-## Active Chunk Optimisation
+## Active Chunk Optimisation (Implemented)
 
-Currently all chunks are processed. Future: skip chunks where `Active == false`. A chunk is activated by player interaction, moving material, or neighbour activity.
+Chunks have a `Sleeping` flag. The tick loop skips sleeping chunks entirely. A chunk is woken by:
+- Player power application (EnqueueAction wakes target chunk + radius neighbors)
+- Material movement crossing chunk boundary (ChangedThisTick → WakeNeighbors)
+- Idle tick counter reaching sleep threshold (UpdateSleepStates)
+
+This is the core performance optimization — an idle world uses near-zero CPU.
 
 ## Thread Safety
 

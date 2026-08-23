@@ -1,7 +1,7 @@
 # Player Powers — Requirements
 
-## REQ-POW-001: Four Powers
-The game SHALL provide exactly four player powers: Rain, Heat, Wind, and Growth. Each power applies a distinct environmental effect to the world.
+## REQ-POW-001: Five Powers
+The game SHALL provide five player powers: Rain, Heat, Wind, Growth, and Life. Each power applies a distinct environmental effect to the world. Life is level-gated (requires Level 4).
 
 **Acceptance:** All four powers are selectable and produce visible, differentiated effects on world state.
 
