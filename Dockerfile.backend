@@ -38,6 +38,10 @@ USER worldweaver
 
 EXPOSE 8080
 
+# The browser frontend is deployed on a separate origin from the API.
+# Runtime environment values can add or replace this allow-list.
+ENV WW_ALLOWED_ORIGINS=https://worldweaver.apilkhadka.com.np
+
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
 
