@@ -483,6 +483,17 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     this.hasEmissive = present;
   }
 
+  /** Rebuilds the 256-entry palette with colours served by the element registry. */
+  setPaletteEntries(entries: Array<{ id: number; colour: [number, number, number, number] }>): void {
+    const data = buildPaletteData();
+    for (const entry of entries) {
+      if (entry.id < 0 || entry.id >= 256) continue;
+      data.set(entry.colour, entry.id * 4);
+    }
+    this.gl.deleteTexture(this.paletteTex);
+    this.paletteTex = this.createPaletteTexture(data);
+  }
+
   /** Uniform locations (cached after first use) */
   private locs: Record<string, WebGLUniformLocation | null> = {};
 
@@ -785,10 +796,9 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     return tex;
   }
 
-  private createPaletteTexture(): WebGLTexture {
+  private createPaletteTexture(data = buildPaletteData()): WebGLTexture {
     const gl = this.gl;
     const tex = gl.createTexture()!;
-    const data = buildPaletteData();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(
       gl.TEXTURE_2D, 0, gl.RGBA,

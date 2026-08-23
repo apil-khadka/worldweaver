@@ -29,6 +29,7 @@ package simulation
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/worldweaver/worldweaver/internal/world"
 )
@@ -114,8 +115,44 @@ func buildReactionIndex() error {
 	return nil
 }
 
+// BuildStatus guards the one-time lazy construction of reactionIndex. The index
+// is built on first use rather than in a global init because the table rows live
+// in reactions_data.go's init and Go does not guarantee module-init ordering for
+// separate files. Leaving the build to a lazy gate makes the table correct in
+// production even though nothing between startup and first use calls it — which
+// was the bug behind every placed element reacting with empty space.
+var (
+	buildLock   sync.Mutex
+	buildErr    error
+	reactionBuilt bool
+)
+
+// ensureReactionIndex builds the lookup table once before any reaction is read.
+func ensureReactionIndex() {
+	if reactionBuilt {
+		return
+	}
+	buildLock.Lock()
+	if !reactionBuilt {
+		buildErr = buildReactionIndex()
+		reactionBuilt = true
+	}
+	buildLock.Unlock()
+}
+
+// LookupReactionDebug exposes the built index for the reaction pairs checked
+// by the failing chemistry tests. Keeping it in-front behind a named test hook.
+func LookupReactionDebug(a, b uint8) string {
+	r := lookupReaction(a, b)
+	if r == nil {
+		return "(none)"
+	}
+	return r.Equation
+}
+
 // lookupReaction returns the reaction for a pair, or nil.
 func lookupReaction(a, b uint8) *Reaction {
+	ensureReactionIndex()
 	i := reactionIndex[a][b]
 	if i == noReaction {
 		return nil
@@ -172,7 +209,8 @@ func ValidateReactions() error {
 		}
 	}
 
-	return buildReactionIndex()
+	ensureReactionIndex()
+	return buildErr
 }
 
 // ReactionsFor returns every reaction an element takes part in.

@@ -120,6 +120,7 @@ export class UIController {
 
     this.network.callbacks = {
       onConnected:    () => this.onConnected(),
+      onWorldReady:   () => this.onWorldReady(),
       onDisconnected: () => this.onDisconnected(),
       onMetrics:      (m) => this.onMetrics(m),
       onPlayerState:  (s) => this.onPlayerState(s),
@@ -143,6 +144,10 @@ export class UIController {
   private onConnected(): void {
     elBadge.textContent = "🟢 Connected";
     elBadge.style.color = "";
+    this.showStatus("Loading world…", "Receiving the initial world state");
+  }
+
+  private onWorldReady(): void {
     this.hideStatus();
   }
 

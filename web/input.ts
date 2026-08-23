@@ -64,6 +64,7 @@ export class InputHandler {
   private repeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastClientX = 0;
   private lastClientY = 0;
+  private lastApplyAt = -Infinity;
   private static readonly REPEAT_INTERVAL_MS = 120; // ≈8/s, server allows 10/s
 
   /**
@@ -233,10 +234,12 @@ export class InputHandler {
     this.lastPowerX = wx;
     this.lastPowerY = wy;
 
-    // Direct world edit: no prediction, because the outcome depends on terrain
-    // the server owns (raise and lower only act on exposed ground).
+    // Direct world edits preview place/erase immediately; the server remains
+    // authoritative and the next chunk update corrects the preview if needed.
     if (this.activeTool !== "force") {
+      this.prediction?.predictEdit(this.activeTool, this.activeMaterial, wx, wy, this.brushRadius);
       this.network.sendEdit(this.activeTool, this.activeMaterial, wx, wy, this.brushRadius);
+      this.lastApplyAt = Date.now();
       return;
     }
 
@@ -246,6 +249,7 @@ export class InputHandler {
     const radius = this.brushRadius;
     this.prediction?.predict(this.network.activePower, wx, wy, radius);
     this.network.sendPower(this.network.activePower, wx, wy, radius);
+    this.lastApplyAt = Date.now();
     // Procedural sound effect. Throttled for the same reason as the shake: eight
     // triggers a second overlap into a buzz rather than reading as feedback.
     const now = Date.now();
@@ -317,7 +321,16 @@ export class InputHandler {
 
   /** Selects the material painted by the place tool. */
   setMaterial(material: number): void {
+    this.setMaterialWithLabel(material);
+  }
+
+  setMaterialWithLabel(material: number, label?: string): void {
     this.activeMaterial = material;
+    document.querySelectorAll<HTMLButtonElement>(".mat-swatch").forEach((b) => {
+      b.classList.toggle("active", b.dataset["material"] === String(material));
+    });
+    const selected = document.getElementById("selected-material-name");
+    if (selected && label) selected.textContent = `Selected: ${label} · click or hold to place`;
   }
 
   /** Activates the place tool after a material is selected from the drawer. */
@@ -371,7 +384,7 @@ export class InputHandler {
       this.network.sendCursor(wx, wy, this.network.activePower);
       this.lastCursorSend = now;
     }
-    if (!this.applying) return;
+    if (!this.applying || now - this.lastApplyAt < InputHandler.REPEAT_INTERVAL_MS) return;
     // A drag is a continuation, not a new impact — same reasoning as the repeat
     // timer. Shaking on every mousemove while painting was the single largest
     // contributor to the canvas vibrating.
@@ -402,7 +415,7 @@ export class InputHandler {
     this.lastClientY = e.touches[0].clientY;
     this.cursorClientX = this.lastClientX;
     this.cursorClientY = this.lastClientY;
-    if (!this.applying) return;
+    if (!this.applying || Date.now() - this.lastApplyAt < InputHandler.REPEAT_INTERVAL_MS) return;
     this.applyPowerAt(this.lastClientX, this.lastClientY);
   }
 

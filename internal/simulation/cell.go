@@ -12,6 +12,16 @@ func simulateCell(w *world.World, x, y int) {
 		return // already processed this tick
 	}
 
+	if element, ok := world.Lookup(w.Material[i]); ok {
+		// Only freshly painted registry elements are loose. Reaction-born and
+		// generated registry cells are considered settled, so chemistry scenes
+		// keep their geometry instead of gases drifting away mid-reaction.
+		if w.Flags[i]&world.FlagMobile != 0 {
+			simulateRegisteredElement(w, x, y, i, element)
+		}
+		return
+	}
+
 	switch w.Material[i] {
 	case world.MatSand:
 		simulateSand(w, x, y)

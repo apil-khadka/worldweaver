@@ -211,10 +211,12 @@ async function main() {
     lastGoalDone = g.completed;
   };
 
-  // Hide loading overlay on connection
-  const origOnConnected = network.callbacks.onConnected;
-  network.callbacks.onConnected = () => {
-    origOnConnected?.();
+  // Hide the full-screen loading overlay only after the first world snapshot has
+  // been applied. Hiding it on WebSocket open exposed an empty renderer while
+  // the map was still travelling over the wire.
+  const origOnWorldReady = network.callbacks.onWorldReady;
+  network.callbacks.onWorldReady = () => {
+    origOnWorldReady?.();
     const lo = document.getElementById("loading-overlay");
     if (lo) lo.classList.remove("visible");
   };

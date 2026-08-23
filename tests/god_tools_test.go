@@ -57,6 +57,41 @@ func TestPlaceToolPaintsMaterial(t *testing.T) {
 	t.Logf("water cells %d -> %d", before, after)
 }
 
+// Registry elements are served by the element drawer and must be accepted by
+// the same place tool as the legacy materials. Before registry-backed placement
+// was wired through, selecting Sodium or Steam produced a silent server error.
+func TestPlaceToolAcceptsRegistryElement(t *testing.T) {
+
+	p := game.NewPlayer()
+	req := game.PowerRequest{
+		Tool: game.ToolPlace, Material: world.ElSodium,
+		X: 32, Y: 20, Radius: 4,
+	}
+	if err := req.Validate(p, 64, 48); err != nil {
+		t.Fatalf("registered element should be placeable: %v", err)
+	}
+}
+
+// Registry powders must enter the same gravity path as legacy sand. This is the
+// smallest reproduction of catalogue elements appearing frozen in mid-air.
+func TestPlacedRegistryPowderFalls(t *testing.T) {
+	w := newFlatTestWorld()
+
+	applyTool(w, simulation.PlayerAction{
+		Tool: simulation.ToolPlace, Material: world.ElSodium,
+		X: 32, Y: 20, Radius: 1, Intensity: 1.0,
+	})
+
+	for i := 0; i < 8; i++ {
+		eng := simulation.NewEngine(w, metrics.New())
+		eng.TickOnce()
+	}
+
+	if got := w.GetMaterial(32, 29); got != world.ElSodium {
+		t.Fatalf("registry powder did not settle above the floor: got material %d at y=29", got)
+	}
+}
+
 func TestEraseToolClearsCells(t *testing.T) {
 	w := newFlatTestWorld()
 	before := countMaterial(w, world.MatRock)

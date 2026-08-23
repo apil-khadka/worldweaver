@@ -70,6 +70,7 @@ export interface RemoteCursor {
 /** Callbacks that other modules register to receive network events. */
 export interface NetworkCallbacks {
   onConnected?():          void;
+  onWorldReady?():         void;
   onDisconnected?():       void;
   onMetrics?(m: MetricsData): void;
   onPlayerState?(s: PlayerState): void;
@@ -183,6 +184,7 @@ export class WorldNetwork {
           data,
         };
         this.renderer.applySnapshot(snap);
+        this.callbacks.onWorldReady?.();
         break;
       }
 

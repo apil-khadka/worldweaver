@@ -128,6 +128,14 @@ func applyPlace(w *world.World, x, y, i int, mat uint8) {
 			w.Moisture[i] = 90
 		}
 	}
+
+	// Registry elements the player paints are loose material: they fall, flow
+	// and sink under gravity until they come to rest. Elements born of a
+	// reaction or drawn from the generated world are not flagged, so they stay
+	// settled — which lets a chemistry scene hold its geometry.
+	if _, ok := world.Lookup(mat); ok {
+		w.Flags[i] |= world.FlagMobile
+	}
 }
 
 // applyErase clears a cell and the transient state attached to it.

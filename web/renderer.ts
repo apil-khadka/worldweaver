@@ -94,6 +94,7 @@ export interface IWorldRenderer {
 export class WorldRenderer implements IWorldRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private imageData: ImageData;
+  private readonly palette = new Uint8Array(256 * 4);
 
   /** Current viewport origin (top-left cell coordinates) */
   viewX = 0;
@@ -127,7 +128,17 @@ export class WorldRenderer implements IWorldRenderer {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D not supported");
     this.ctx = ctx;
+    this.palette.set(PALETTE);
     this.imageData = ctx.createImageData(canvas.width, canvas.height);
+  }
+
+  /** Updates colours for registry elements returned by the server. */
+  setPaletteEntries(entries: Array<{ id: number; colour: [number, number, number, number] }>): void {
+    for (const entry of entries) {
+      if (entry.id < 0 || entry.id >= 256) continue;
+      this.palette.set(entry.colour, entry.id * 4);
+    }
+    this.draw();
   }
 
   /** Called when the server sends world dimensions. */
@@ -262,10 +273,10 @@ export class WorldRenderer implements IWorldRenderer {
           }
           const p = (py * cw + px) * 4;
           const m = mat * 4;
-          buf[p]     = PALETTE[m];
-          buf[p + 1] = PALETTE[m + 1];
-          buf[p + 2] = PALETTE[m + 2];
-          buf[p + 3] = PALETTE[m + 3];
+          buf[p]     = this.palette[m];
+          buf[p + 1] = this.palette[m + 1];
+          buf[p + 2] = this.palette[m + 2];
+          buf[p + 3] = this.palette[m + 3];
         }
       }
     } else {
@@ -281,10 +292,10 @@ export class WorldRenderer implements IWorldRenderer {
           }
           const p = (py * cw + px) * 4;
           const m = mat * 4;
-          buf[p]     = PALETTE[m];
-          buf[p + 1] = PALETTE[m + 1];
-          buf[p + 2] = PALETTE[m + 2];
-          buf[p + 3] = PALETTE[m + 3];
+          buf[p]     = this.palette[m];
+          buf[p + 1] = this.palette[m + 1];
+          buf[p + 2] = this.palette[m + 2];
+          buf[p + 3] = this.palette[m + 3];
         }
       }
     }

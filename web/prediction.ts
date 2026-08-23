@@ -10,7 +10,7 @@
  *   Herbivore=14, Predator=15, Cloud=16
  */
 
-import { IGameRenderer } from "./network.js";
+import { IGameRenderer, GodTool } from "./network.js";
 import { PowerEffects } from "./effects.js";
 
 const enum Mat {
@@ -124,6 +124,39 @@ export class ClientPrediction {
 
     // Trigger glow effect on the overlay
     this.effects.triggerGlow(wx, wy, power, radius);
+  }
+
+  /**
+   * Apply an optimistic local preview for a place/erase edit, so painting an
+   * element is visible immediately. The server stays authoritative and the next
+   * chunk update overwrites the preview.
+   */
+  predictEdit(tool: GodTool, material: number, wx: number, wy: number, radius: number): void {
+    const cache = this.renderer.getMaterialCache();
+    if (!cache) return;
+
+    const worldW = this.renderer.worldW;
+    const worldH = this.renderer.worldH;
+    const r2 = radius * radius;
+    const xMin = Math.max(0, wx - radius);
+    const xMax = Math.min(worldW - 1, wx + radius);
+    const yMin = Math.max(0, wy - radius);
+    const yMax = Math.min(worldH - 1, wy + radius);
+
+    let changed = false;
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = xMin; x <= xMax; x++) {
+        const dx = x - wx;
+        const dy = y - wy;
+        if (dx * dx + dy * dy > r2) continue;
+        const idx = y * worldW + x;
+        const next = tool === "erase" ? Mat.Empty : material;
+        if (cache[idx] === next) continue;
+        cache[idx] = next;
+        changed = true;
+      }
+    }
+    if (changed) this.renderer.drawImmediate();
   }
 
   private hasNeighbor(

@@ -5,6 +5,7 @@ const (
 	FlagMoved   uint8 = 1 << 0 // set when a cell has already been moved this tick
 	FlagWet     uint8 = 1 << 1 // soil has been recently wetted
 	FlagHot     uint8 = 1 << 2 // cell is above fire-spread temperature
+	FlagMobile  uint8 = 1 << 3 // registry element freshly painted by the player; loose, obeys gravity
 )
 
 // GetMaterial returns the material at (x, y). Returns MatEmpty for OOB.

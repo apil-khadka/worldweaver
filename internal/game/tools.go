@@ -1,5 +1,7 @@
 package game
 
+import "github.com/worldweaver/worldweaver/internal/world"
+
 // God-mode tools.
 //
 // Tools reuse the power message and its validation, rate limiting and influence
@@ -95,6 +97,9 @@ var HazardMaterials = []uint8{matPlasma, matRadiation, matVoid}
 
 // IsHazardMaterial reports whether placing this material is destructive.
 func IsHazardMaterial(m uint8) bool {
+	if world.IsHazard(m) {
+		return true
+	}
 	for _, h := range HazardMaterials {
 		if m == h {
 			return true
@@ -105,6 +110,9 @@ func IsHazardMaterial(m uint8) bool {
 
 // IsPlaceable reports whether a material may be painted directly.
 func IsPlaceable(m uint8) bool {
+	if _, ok := world.Lookup(m); ok {
+		return true
+	}
 	for _, allowed := range PlaceableMaterials {
 		if m == allowed {
 			return true
