@@ -137,6 +137,10 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	// Scores API — top 10 players per world
 	r.Get("/api/scores", game.ScoresAPIHandler(hub.Scoreboard))
 
+	// Collaboration API — who built this world, who they built it with, and how
+	// far the population has carried its shared milestone.
+	r.Get("/api/contributions", hub.handleContributions)
+
 	return r
 }
 
@@ -424,9 +428,33 @@ func (h *Hub) handleDeleteWorld(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.Access.Forget(id)
+	h.ForgetWorldState(id)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// handleContributions reports who has built a world and who they built it with.
+//
+// Readable without a session for public worlds so the landing page can show a
+// world's collaborators, but a hidden world's roster is only for the people who
+// can reach the world itself — the roster would otherwise leak both its existence
+// and who is inside it.
+func (h *Hub) handleContributions(w http.ResponseWriter, r *http.Request) {
+	worldID := r.URL.Query().Get("world")
+	if worldID == "" {
+		worldID = h.WorldName
+	}
+
+	keyID := ""
+	if sess := h.auth.Validate(bearerToken(r)); sess != nil {
+		keyID = sess.KeyID
+	}
+	if !h.Access.Visible(worldID, keyID) {
+		writeError(w, http.StatusNotFound, "world not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.CollaborationFor(worldID))
 }
 
 // ── Invites and membership ───────────────────────────────────────────────────

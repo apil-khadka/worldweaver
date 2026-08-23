@@ -113,6 +113,9 @@ func main() {
 				log.Printf("pruned %d expired session(s)", n)
 			}
 			hub.Access.PruneInvites()
+			// Contribution rosters for worlds nobody has touched in a day are
+			// history, not live state.
+			hub.Contributions.PruneIdle(24 * time.Hour)
 		}
 	}()
 

@@ -35,6 +35,11 @@ type Hub struct {
 	// startup code can seed it; every authorization decision goes through it.
 	Access *game.AccessRegistry
 
+	// Contributions records who built what and who they built it with. Separate
+	// from Scoreboard on purpose: the scoreboard ranks players against each other,
+	// this credits them for working together.
+	Contributions *game.ContributionLedger
+
 	// AllowedOrigins lists extra origin patterns accepted on the WebSocket
 	// upgrade. Same-origin is always allowed; anything here is in addition to it.
 	// Empty means same-origin only, which is the safe default.
@@ -65,18 +70,19 @@ type powerEvent struct {
 // NewHub creates a Hub wired to the given world and engine.
 func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics, sb *game.Scoreboard, worldName string, auth *game.AuthManager, worldMgr *game.WorldManager) *Hub {
 	return &Hub{
-		clients:      make(map[*Client]struct{}),
-		world:        w,
-		engine:       eng,
-		metrics:      m,
-		connLimiter:  NewConnRateLimiter(),
-		Scoreboard:   sb,
-		WorldName:    worldName,
-		auth:         auth,
-		worldMgr:     worldMgr,
-		Access:       game.NewAccessRegistry(),
-		chatLimits:   make(map[uint32]*chatRateEntry),
-		recentPowers: make([]powerEvent, 0, 64),
+		clients:       make(map[*Client]struct{}),
+		world:         w,
+		engine:        eng,
+		metrics:       m,
+		connLimiter:   NewConnRateLimiter(),
+		Scoreboard:    sb,
+		WorldName:     worldName,
+		auth:          auth,
+		worldMgr:      worldMgr,
+		Access:        game.NewAccessRegistry(),
+		Contributions: game.NewContributionLedger(),
+		chatLimits:    make(map[uint32]*chatRateEntry),
+		recentPowers:  make([]powerEvent, 0, 64),
 	}
 }
 
@@ -85,7 +91,7 @@ func (h *Hub) register(c *Client) {
 	h.clients[c] = struct{}{}
 	h.mu.Unlock()
 	h.metrics.PlayerCount.Add(1)
-	h.Scoreboard.PlayerConnected(h.WorldName, c.Player.ID)
+	h.Scoreboard.PlayerConnected(h.worldIDOf(c), c.Player.ID)
 	log.Printf("hub: player %d registered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
 	h.BroadcastPlayerJoin(c.Player.ID)
 }
@@ -96,7 +102,7 @@ func (h *Hub) unregister(c *Client) {
 	h.mu.Unlock()
 	close(c.send)
 	h.metrics.PlayerCount.Add(-1)
-	h.Scoreboard.PlayerDisconnected(h.WorldName, c.Player.ID)
+	h.Scoreboard.PlayerDisconnected(h.worldIDOf(c), c.Player.ID)
 	log.Printf("hub: player %d unregistered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
 	h.BroadcastPlayerLeave(c.Player.ID)
 }
@@ -138,10 +144,15 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 	if req.Tool != game.ToolForce {
 		cost = game.ToolCostPerCell[req.Tool] * float32(cellsAffected)
 	}
-	h.Scoreboard.RecordPowerAction(h.WorldName, c.Player.ID, req.Power, cellsAffected, cost)
+	h.Scoreboard.RecordPowerAction(h.worldIDOf(c), c.Player.ID, req.Power, cellsAffected, cost)
+
+	// Record the contribution and tell the players involved when they earned
+	// collaboration credit, so working alongside someone is something they can
+	// see happening rather than a number they find later.
+	h.recordContribution(c, req, cellsAffected)
 
 	// Update player score/level from scoreboard
-	if ps := h.Scoreboard.GetPlayerScore(h.WorldName, c.Player.ID); ps != nil {
+	if ps := h.Scoreboard.GetPlayerScore(h.worldIDOf(c), c.Player.ID); ps != nil {
 		c.Player.UpdateScore(ps.Score)
 	}
 
@@ -552,9 +563,9 @@ func (h *Hub) awardGoalBonus() {
 		// Award 50 bonus influence (direct add to the pool, capped at 200)
 		c.Player.AddBonusInfluence(50)
 		// Record score bonus
-		h.Scoreboard.RecordGoalBonus(h.WorldName, c.Player.ID, 100)
+		h.Scoreboard.RecordGoalBonus(h.worldIDOf(c), c.Player.ID, 100)
 		// Update player score/level
-		if ps := h.Scoreboard.GetPlayerScore(h.WorldName, c.Player.ID); ps != nil {
+		if ps := h.Scoreboard.GetPlayerScore(h.worldIDOf(c), c.Player.ID); ps != nil {
 			c.Player.UpdateScore(ps.Score)
 		}
 		// Notify client

@@ -38,21 +38,22 @@ const (
 
 // Outbound message types (server → client)
 const (
-	MsgWelcome       = "welcome"
-	MsgWorldSnapshot = "world_snapshot"
-	MsgChunkUpdate   = "chunk_update"
-	MsgPlayerState   = "player_state"
-	MsgWorldMetrics  = "world_metrics"
-	MsgError         = "error"
-	MsgPong          = "pong"
-	MsgCursorUpdate  = "cursor_update"
-	MsgPlayerJoin    = "player_join"
-	MsgPlayerLeave   = "player_leave"
-	MsgChatBroadcast = "chat"
-	MsgPingBroadcast = "ping_location"
+	MsgWelcome        = "welcome"
+	MsgWorldSnapshot  = "world_snapshot"
+	MsgChunkUpdate    = "chunk_update"
+	MsgPlayerState    = "player_state"
+	MsgWorldMetrics   = "world_metrics"
+	MsgError          = "error"
+	MsgPong           = "pong"
+	MsgCursorUpdate   = "cursor_update"
+	MsgPlayerJoin     = "player_join"
+	MsgPlayerLeave    = "player_leave"
+	MsgChatBroadcast  = "chat"
+	MsgPingBroadcast  = "ping_location"
 	MsgEmoteBroadcast = "emote"
-	MsgCombo         = "combo"
-	MsgGoalUpdate    = "goal_update"
+	MsgCombo          = "combo"
+	MsgAssist         = "assist"
+	MsgGoalUpdate     = "goal_update"
 )
 
 // ---- Inbound message structs ----
@@ -100,11 +101,11 @@ type ViewportMsg struct {
 
 // WelcomeMsg is the first message the server sends to a new client.
 type WelcomeMsg struct {
-	Type    string `json:"type"`
+	Type     string `json:"type"`
 	PlayerID uint32 `json:"playerID"`
-	WorldW  int    `json:"worldW"`
-	WorldH  int    `json:"worldH"`
-	Tick    uint64 `json:"tick"`
+	WorldW   int    `json:"worldW"`
+	WorldH   int    `json:"worldH"`
+	Tick     uint64 `json:"tick"`
 }
 
 // WorldSnapshotMsg carries a full material snapshot of the visible region.
@@ -121,8 +122,8 @@ type WorldSnapshotMsg struct {
 
 // ChunkUpdateEntry carries a single dirty chunk's material data.
 type ChunkUpdateEntry struct {
-	CX   int    `json:"cx"`   // chunk grid X
-	CY   int    `json:"cy"`   // chunk grid Y
+	CX   int    `json:"cx"` // chunk grid X
+	CY   int    `json:"cy"` // chunk grid Y
 	Tick uint64 `json:"tick"`
 	Data []byte `json:"data"` // flat material array for this chunk
 }
@@ -251,6 +252,30 @@ type ComboBroadcastMsg struct {
 	Powers    []uint8  `json:"powers"`
 	X         int      `json:"x"`
 	Y         int      `json:"y"`
+}
+
+// AssistMsg is broadcast when a player's action was credited as joint work.
+//
+// Distinct from ComboBroadcastMsg, which fires on two *different* powers landing
+// close together within 500ms — a spectacle. An assist is the slower, ordinary
+// case of two players building the same thing, and it carries the score effect
+// so the client can show what cooperating was worth.
+type AssistMsg struct {
+	Type     string `json:"type"`
+	PlayerID uint32 `json:"playerID"`
+	Nickname string `json:"nickname"`
+
+	// PartnerIDs and Partners are parallel: an empty name means that partner has
+	// since disconnected.
+	PartnerIDs []uint32 `json:"partnerIDs"`
+	Partners   []string `json:"partners"`
+
+	Multiplier float64 `json:"multiplier"`
+	Awarded    float64 `json:"awarded"`
+	TotalScore float64 `json:"totalScore"`
+	Category   string  `json:"category"`
+	X          int     `json:"x"`
+	Y          int     `json:"y"`
 }
 
 // ---- Goal messages ----
