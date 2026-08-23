@@ -106,11 +106,19 @@ export class WorldRenderer implements IWorldRenderer {
   /** Chunk size in cells — must match the server ChunkSize */
   chunkSize = 64;
 
-  /** Zoom scale — 0.5, 1, 2, or 4 */
+  /** Zoom scale in screen pixels per world cell. */
   zoom = 1;
 
-  /** Discrete zoom levels */
-  private static readonly ZOOM_LEVELS = [0.5, 1, 2, 4];
+  /**
+   * Smallest zoom that still covers the canvas with world content.
+   *
+   * Mirrors the WebGL2 renderer so the camera behaves identically whichever
+   * backend is in use: zooming out past this would leave empty margins.
+   */
+  private fitZoom = 1;
+
+  /** How far the player may zoom in relative to the fitted level. */
+  private static readonly MAX_ZOOM_FACTOR = 16;
 
   /** Local material cache. Indexed as [y * worldW + x]. */
   private materialCache: Uint8Array | null = null;
@@ -127,15 +135,47 @@ export class WorldRenderer implements IWorldRenderer {
     this.worldW = w;
     this.worldH = h;
     this.materialCache = new Uint8Array(w * h);
+    this.recomputeFitZoom();
+    this.clampCamera();
+  }
+
+  /**
+   * Recomputes the zoom needed to cover the canvas with world content.
+   *
+   * For a world wider than the canvas aspect this resolves to fitting the
+   * height, leaving the width to be panned.
+   */
+  private recomputeFitZoom(): void {
+    if (this.worldW === 0 || this.worldH === 0) return;
+    if (this.canvas.width === 0 || this.canvas.height === 0) return;
+
+    const previous = this.fitZoom;
+    this.fitZoom = Math.max(
+      this.canvas.width / this.worldW,
+      this.canvas.height / this.worldH,
+    );
+
+    this.zoom = previous > 0 && this.zoom > previous
+      ? Math.max(this.fitZoom, this.zoom * (this.fitZoom / previous))
+      : this.fitZoom;
+  }
+
+  /** Keeps the viewport inside the world so no empty margin is shown. */
+  private clampCamera(): void {
+    const maxX = Math.max(0, this.worldW - this.visibleW);
+    const maxY = Math.max(0, this.worldH - this.visibleH);
+    this.viewX = Math.min(Math.max(0, this.viewX), maxX);
+    this.viewY = Math.min(Math.max(0, this.viewY), maxY);
   }
 
   /** Step zoom in or out. Returns new zoom level. */
   stepZoom(direction: 1 | -1): number {
-    const levels = WorldRenderer.ZOOM_LEVELS;
-    const curIdx = levels.indexOf(this.zoom);
-    const newIdx = Math.max(0, Math.min(levels.length - 1, curIdx + direction));
-    this.zoom = levels[newIdx];
-    this.onResize();
+    const max = this.fitZoom * WorldRenderer.MAX_ZOOM_FACTOR;
+    const next = direction > 0 ? this.zoom * 2 : this.zoom / 2;
+    this.zoom = Math.min(max, Math.max(this.fitZoom, next));
+    this.clampCamera();
+    // Only the projection changed; the backing ImageData is still the right size.
+    this.draw();
     return this.zoom;
   }
 
@@ -184,6 +224,9 @@ export class WorldRenderer implements IWorldRenderer {
   /** Resize internal ImageData after canvas resize. */
   onResize(): void {
     this.imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+    // The canvas aspect changed, so the zoom that covers it changed too.
+    this.recomputeFitZoom();
+    this.clampCamera();
     this.draw();
   }
 

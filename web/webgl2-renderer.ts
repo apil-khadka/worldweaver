@@ -42,79 +42,283 @@ uniform vec2       u_camera;     // world-coordinate top-left
 uniform vec2       u_viewport;   // canvas size in pixels
 uniform float      u_time;       // seconds
 
+// 1 when the visible world contains fire, lava or embers. The light-bleed pass
+// costs eight texture samples on every fragment, so it is skipped entirely when
+// nothing is burning — which is the common case. The branch is on a uniform, so
+// it is coherent across the draw call and costs nothing.
+uniform int        u_hasEmissive;
+
+// ── Material classes ───────────────────────────────────────────────────────
+
+const uint MAT_EMPTY = 0u;
+const uint MAT_ROCK  = 1u;
+const uint MAT_SOIL  = 2u;
+const uint MAT_SAND  = 3u;
+const uint MAT_WATER = 4u;
+const uint MAT_PLANT = 5u;
+const uint MAT_FIRE  = 6u;
+const uint MAT_VAPOR = 7u;
+const uint MAT_SMOKE = 8u;
+const uint MAT_LAVA  = 9u;
+const uint MAT_ICE   = 10u;
+const uint MAT_ASH   = 11u;
+const uint MAT_OIL   = 12u;
+const uint MAT_EMBER = 13u;
+const uint MAT_CLOUD = 16u;
+
+// Opaque terrain: blocks light and forms the visible landscape silhouette.
+bool isTerrain(uint m) {
+  return m == MAT_ROCK || m == MAT_SOIL || m == MAT_SAND
+      || m == MAT_PLANT || m == MAT_ICE || m == MAT_ASH || m == MAT_OIL;
+}
+
+// Anything that light passes through, for surface/edge detection.
+bool isOpen(uint m) {
+  return m == MAT_EMPTY || m == MAT_VAPOR || m == MAT_SMOKE || m == MAT_CLOUD;
+}
+
 // ── Utilities ──────────────────────────────────────────────────────────────
 
+const float TAU = 6.2831853;
+
+// Deterministic per-cell value. Callers must hash on position only and use time
+// to shift phase; hashing a quantised clock re-rolls every cell each time the
+// clock ticks over, which shows up as strobing rather than animation.
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+// Value noise, used for cloud/haze banding rather than per-cell speckle.
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
 uint sampleMat(vec2 worldPos) {
-  vec2 uv = worldPos / u_worldSize;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0u;
+  if (worldPos.x < 0.0 || worldPos.x >= u_worldSize.x
+   || worldPos.y < 0.0 || worldPos.y >= u_worldSize.y) return MAT_EMPTY;
+  vec2 uv = (floor(worldPos) + 0.5) / u_worldSize;
   return texture(u_material, uv).r;
 }
 
-void main() {
-  // Map fragment to world coordinate
-  vec2 worldPos = u_camera + v_uv * u_viewport;
-  vec2 cellCoord = floor(worldPos);
-  vec2 cellUV = (cellCoord + 0.5) / u_worldSize;
+// Per-material surface roughness — how strongly each material breaks up into
+// lighter and darker grains. This is what separates "flat colour per cell" from
+// something that reads as rock, soil or foliage.
+float roughnessFor(uint m) {
+  if (m == MAT_ROCK)  return 0.13;
+  if (m == MAT_SOIL)  return 0.10;
+  if (m == MAT_SAND)  return 0.07;
+  if (m == MAT_PLANT) return 0.16;
+  if (m == MAT_ASH)   return 0.10;
+  if (m == MAT_ICE)   return 0.05;
+  if (m == MAT_WATER) return 0.03;
+  return 0.05;
+}
 
-  // Bounds check
-  if (cellUV.x < 0.0 || cellUV.x > 1.0 || cellUV.y < 0.0 || cellUV.y > 1.0) {
+// Sky colour for open cells above the landscape.
+vec3 skyColour(float heightFrac, float x) {
+  vec3 high = vec3(0.29, 0.47, 0.72); // deep blue overhead
+  vec3 low  = vec3(0.62, 0.72, 0.80); // pale haze near the horizon
+  // heightFrac is 1 at the top of the map and 0 at the bottom.
+  vec3 sky = mix(low, high, pow(clamp(heightFrac, 0.0, 1.0), 1.4));
+
+  // Very soft banding so large sky areas are not perfectly flat.
+  sky += (valueNoise(vec2(x * 0.01, heightFrac * 4.0)) - 0.5) * 0.02;
+  return sky;
+}
+
+// Background behind a see-through cell: either open sky or cave interior.
+// An empty cell with terrain overhead is underground, otherwise it is sky.
+vec3 backgroundAt(vec2 cellCoord, float depth) {
+  // Five samples on a wider stride are enough to tell sky from cave interior,
+  // and this runs for roughly half the screen, so the sample count matters.
+  float cover = 0.0;
+  for (int i = 1; i <= 5; i++) {
+    if (isTerrain(sampleMat(cellCoord + vec2(0.0, -float(i) * 7.0)))) {
+      cover = 1.0 - float(i - 1) / 5.0;
+      break;
+    }
+  }
+  vec3 sky  = skyColour(1.0 - depth, cellCoord.x);
+  vec3 cave = mix(vec3(0.07, 0.06, 0.07), vec3(0.02, 0.02, 0.03), depth);
+  return mix(sky, cave, cover);
+}
+
+void main() {
+  // Map fragment to world coordinate. WebGL's v_uv.y is 0 at the bottom of the
+  // screen while world row 0 is the top of the map, so Y is flipped here.
+  vec2 flippedUV = vec2(v_uv.x, 1.0 - v_uv.y);
+  vec2 worldPos = u_camera + flippedUV * u_viewport;
+  vec2 cellCoord = floor(worldPos);
+
+  // Outside the world entirely.
+  if (cellCoord.x < 0.0 || cellCoord.x >= u_worldSize.x
+   || cellCoord.y < 0.0 || cellCoord.y >= u_worldSize.y) {
     fragColor = vec4(0.05, 0.05, 0.063, 1.0);
     return;
   }
 
-  // Sample material ID
+  vec2 cellUV = (cellCoord + 0.5) / u_worldSize;
   uint matID = texture(u_material, cellUV).r;
 
-  // Base colour from palette
-  vec4 col = texture(u_palette, vec2((float(matID) + 0.5) / 256.0, 0.5));
-
-  // ── Per-cell color variation ─────────────────────────────────────────────
-  float noise = hash(cellCoord) * 0.08 - 0.04;
-  col.rgb += noise;
-
-  // ── Depth shading (lower = darker, simulates underground) ────────────────
+  // Depth through the world, 0 at the top row and 1 at the deepest row.
   float depth = cellCoord.y / u_worldSize.y;
-  float depthDarken = mix(1.0, 0.6, depth);
-  col.rgb *= depthDarken;
 
-  // ── Water shimmer ────────────────────────────────────────────────────────
-  if (matID == 4u) {
-    float wave1 = sin(cellCoord.x * 0.3 + u_time * 2.0) * 0.05;
-    float wave2 = sin(cellCoord.y * 0.5 + u_time * 1.3) * 0.03;
-    float shimmer = wave1 + wave2;
-    float sparkle = hash(cellCoord + floor(u_time * 3.0)) * 0.06;
-    col.rgb += vec3(shimmer * 0.15 + sparkle, shimmer * 0.3 + sparkle, shimmer * 0.6 + sparkle * 1.5);
+  vec3 col;
+
+  if (matID == MAT_EMPTY) {
+    col = backgroundAt(cellCoord, depth);
+  } else if (matID == MAT_VAPOR || matID == MAT_SMOKE || matID == MAT_CLOUD) {
+    // Gases are translucent. There is no separate sky layer in this view, so
+    // composite them over the background this cell would otherwise show.
+    vec4 base = texture(u_palette, vec2((float(matID) + 0.5) / 256.0, 0.5));
+    float density = base.a * (0.65 + valueNoise(cellCoord * 0.22 + u_time * 0.15) * 0.5);
+    col = mix(backgroundAt(cellCoord, depth), base.rgb, clamp(density, 0.0, 1.0));
+  } else {
+    vec4 base = texture(u_palette, vec2((float(matID) + 0.5) / 256.0, 0.5));
+    col = base.rgb;
+
+    // ── Material grain ────────────────────────────────────────────────────
+    // Two octaves: fine per-cell grain plus coarser clumping, so large areas of
+    // one material develop visible structure instead of banding.
+    float rough = roughnessFor(matID);
+    float grain = hash(cellCoord) - 0.5;
+    float clump = valueNoise(cellCoord * 0.18) - 0.5;
+    col *= 1.0 + (grain * 0.6 + clump * 0.9) * rough;
+
+    // ── Rock strata ───────────────────────────────────────────────────────
+    // Bedrock is roughly half of the map, so without internal structure it
+    // reads as one flat slab. Warped horizontal banding turns it into layered
+    // geology, with occasional lighter mineral seams.
+    if (matID == MAT_ROCK) {
+      float warp = valueNoise(vec2(cellCoord.x * 0.010, cellCoord.y * 0.05));
+      float strata = sin(cellCoord.y * 0.30 + warp * 7.0) * 0.5 + 0.5;
+      col *= 0.90 + strata * 0.22;
+
+      float vein = valueNoise(vec2(cellCoord.x * 0.035, cellCoord.y * 0.028));
+      if (vein > 0.74) col *= vec3(1.10, 1.03, 0.93);
+    }
+
+    // ── Surface lighting ──────────────────────────────────────────────────
+    // Terrain lit from above: the topmost cells of a landmass catch light and
+    // the cells just beneath fall into shadow. This is what gives the world a
+    // readable silhouette rather than a flat mass of colour.
+    if (isTerrain(matID)) {
+      bool openAbove = isOpen(sampleMat(cellCoord + vec2(0.0, -1.0)));
+      if (openAbove) {
+        col *= 1.28; // sun-facing crest
+      } else if (isOpen(sampleMat(cellCoord + vec2(0.0, -2.0)))) {
+        col *= 1.10; // just below the crest
+      }
+
+      // Ambient occlusion: crevices with many solid neighbours darken.
+      float occl = 0.0;
+      for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+          if (dx == 0 && dy == 0) continue;
+          if (isTerrain(sampleMat(cellCoord + vec2(float(dx), float(dy))))) occl += 1.0;
+        }
+      }
+      col *= mix(1.05, 0.86, occl / 8.0);
+
+      // Directional side shading for a sense of relief.
+      if (isOpen(sampleMat(cellCoord + vec2(-1.0, 0.0)))) col *= 1.08;
+      if (isOpen(sampleMat(cellCoord + vec2( 1.0, 0.0)))) col *= 0.94;
+    }
+
+    // ── Water ─────────────────────────────────────────────────────────────
+    if (matID == MAT_WATER) {
+      // Count the water stacked overhead (-y is up). The more there is, the
+      // further below the surface this cell sits, so the darker it reads.
+      float waterAbove = 0.0;
+      for (int i = 1; i <= 8; i++) {
+        if (sampleMat(cellCoord + vec2(0.0, -float(i))) == MAT_WATER) waterAbove += 1.0;
+        else break;
+      }
+      col *= mix(1.15, 0.72, waterAbove / 8.0);
+
+      // Bright, animated surface line where water meets air.
+      if (isOpen(sampleMat(cellCoord + vec2(0.0, -1.0)))) {
+        float ripple = sin(cellCoord.x * 0.45 + u_time * 2.2) * 0.5 + 0.5;
+        col += vec3(0.10, 0.16, 0.20) * (0.45 + ripple * 0.55);
+      }
+
+      // Glints fade in and out on a continuous wave. Re-rolling a hash against
+      // a quantised clock made every cell jump to an unrelated value several
+      // times a second, which read as vibration rather than sparkle.
+      float glintPhase = hash(cellCoord) * TAU;
+      float glint = sin(u_time * 2.5 + glintPhase);
+      if (glint > 0.99) {
+        col += vec3(0.30, 0.34, 0.38) * (glint - 0.99) * 100.0;
+      }
+    }
+
+    // ── Plants ────────────────────────────────────────────────────────────
+    if (matID == MAT_PLANT) {
+      // Vary hue per clump so vegetation is not one flat green.
+      float tint = valueNoise(cellCoord * 0.09);
+      col.r *= 0.85 + tint * 0.35;
+      col.b *= 0.80 + tint * 0.30;
+      if (isOpen(sampleMat(cellCoord + vec2(0.0, -1.0)))) col += vec3(0.02, 0.09, 0.01);
+    }
+
+    // ── Emissive materials ────────────────────────────────────────────────
+    if (matID == MAT_FIRE || matID == MAT_EMBER) {
+      // Each cell keeps a fixed phase offset so neighbouring flames are not in
+      // lockstep, while brightness varies smoothly in time. Two incommensurate
+      // frequencies keep it from looking metronomic.
+      float phase = hash(cellCoord) * TAU;
+      float f1 = sin(u_time *  7.0 + phase) * 0.5 + 0.5;
+      float f2 = sin(u_time * 11.3 + phase * 1.7) * 0.5 + 0.5;
+      float flicker = f1 * 0.7 + f2 * 0.3;
+      col = mix(col, vec3(1.0, 0.86, 0.35), flicker * 0.5);
+    }
+    if (matID == MAT_LAVA) {
+      float pulse = sin(u_time * 2.2 + cellCoord.x * 0.25 + cellCoord.y * 0.2) * 0.5 + 0.5;
+      col = mix(col, vec3(1.0, 0.72, 0.16), pulse * 0.4);
+    }
+    if (matID == MAT_ICE) {
+      col += vec3(0.0, 0.02, 0.05) * (hash(cellCoord * 0.5) + 0.4);
+    }
+
+    // Underground materials sit in progressively dimmer light.
+    if (isTerrain(matID)) {
+      col *= mix(1.0, 0.55, smoothstep(0.15, 1.0, depth));
+    }
   }
 
-  // ── Fire glow (brighten adjacent pixels) ─────────────────────────────────
-  if (matID == 6u) {
-    // Self-flicker
-    float flicker = hash(cellCoord + floor(u_time * 10.0));
-    col.rgb = mix(col.rgb, vec3(1.0, 0.5, 0.0), flicker * 0.4);
-  } else {
-    // Check neighbours for fire glow bleed
+  // ── Light bleed from emissive neighbours ─────────────────────────────────
+  // Fire and lava spill warm light onto everything around them, which sells the
+  // simulation far more than colouring the burning cell alone. Kept to a 3x3
+  // neighbourhood so the per-fragment sample count stays modest.
+  if (u_hasEmissive == 1 && matID != MAT_FIRE && matID != MAT_LAVA && matID != MAT_EMBER) {
     float glow = 0.0;
     for (int dy = -1; dy <= 1; dy++) {
       for (int dx = -1; dx <= 1; dx++) {
         if (dx == 0 && dy == 0) continue;
-        vec2 np = cellCoord + vec2(float(dx), float(dy));
-        uint nm = sampleMat(np);
-        if (nm == 6u) {
-          float dist = length(vec2(float(dx), float(dy)));
-          glow += 0.12 / dist;
+        uint nm = sampleMat(cellCoord + vec2(float(dx), float(dy)));
+        if (nm == MAT_FIRE || nm == MAT_LAVA || nm == MAT_EMBER) {
+          glow += 0.16 / length(vec2(float(dx), float(dy)));
         }
       }
     }
-    glow = min(glow, 0.4);
-    col.rgb += vec3(glow * 0.8, glow * 0.3, glow * 0.05);
+    glow = min(glow, 0.6);
+    col += vec3(glow, glow * 0.45, glow * 0.12);
   }
 
-  col.rgb = clamp(col.rgb, 0.0, 1.0);
-  fragColor = col;
+  // ── Vignette ────────────────────────────────────────────────────────────
+  vec2 vc = v_uv - 0.5;
+  col *= 1.0 - dot(vc, vc) * 0.28;
+
+  // The view is a single opaque layer; translucency was already composited
+  // against the sky or cave background above.
+  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
 
 // ── Palette ────────────────────────────────────────────────────────────────
@@ -201,11 +405,19 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
   /** Chunk size in cells */
   chunkSize = 64;
 
-  /** Zoom scale — 0.5, 1, 2, or 4 */
+  /** Zoom scale in screen pixels per world cell. */
   zoom = 1;
 
-  /** Discrete zoom levels */
-  private static readonly ZOOM_LEVELS = [0.5, 1, 2, 4];
+  /**
+   * Smallest zoom that still covers the canvas with world content.
+   *
+   * Zooming out past this would leave empty margins around the map, so it acts
+   * as the lower bound and as the initial zoom level.
+   */
+  private fitZoom = 1;
+
+  /** How far the player may zoom in relative to the fitted level. */
+  private static readonly MAX_ZOOM_FACTOR = 16;
 
   /** How many world cells are visible horizontally */
   get visibleW(): number {
@@ -218,6 +430,19 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
 
   /** Local material cache for minimap/prediction compatibility */
   private materialCache: Uint8Array | null = null;
+
+  /**
+   * Whether anything in the world is currently emitting light.
+   *
+   * Drives the shader's light-bleed pass, which is skipped when false. Updated
+   * from outside on a slow interval rather than per frame.
+   */
+  private hasEmissive = false;
+
+  /** Reports whether fire, lava or embers are present, enabling light bleed. */
+  setHasEmissive(present: boolean): void {
+    this.hasEmissive = present;
+  }
 
   /** Uniform locations (cached after first use) */
   private locs: Record<string, WebGLUniformLocation | null> = {};
@@ -235,7 +460,7 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     // Cache uniform locations
     const uniforms = [
       "u_material", "u_palette", "u_worldSize",
-      "u_camera", "u_viewport", "u_time",
+      "u_camera", "u_viewport", "u_time", "u_hasEmissive",
     ];
     for (const u of uniforms) {
       this.locs[u] = gl.getUniformLocation(this.program, u);
@@ -254,14 +479,48 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     const gl = this.gl;
     gl.deleteTexture(this.matTex);
     this.matTex = this.createEmptyMaterialTexture(w, h);
+
+    this.recomputeFitZoom();
+    this.clampCamera();
+  }
+
+  /**
+   * Recomputes the zoom needed to cover the canvas with world content.
+   *
+   * A 1024x512 world shown 1:1 on a wider canvas leaves the map floating in
+   * empty space, so the view is scaled to cover whichever axis is tighter.
+   */
+  private recomputeFitZoom(): void {
+    if (this.worldW === 0 || this.worldH === 0) return;
+    if (this.canvas.width === 0 || this.canvas.height === 0) return;
+
+    const previous = this.fitZoom;
+    this.fitZoom = Math.max(
+      this.canvas.width / this.worldW,
+      this.canvas.height / this.worldH,
+    );
+
+    // Keep the player's relative zoom across resizes; snap to fit on first run.
+    this.zoom = previous > 0 && this.zoom > previous
+      ? Math.max(this.fitZoom, this.zoom * (this.fitZoom / previous))
+      : this.fitZoom;
+  }
+
+  /** Keeps the viewport inside the world so no empty margin is shown. */
+  private clampCamera(): void {
+    const maxX = Math.max(0, this.worldW - this.visibleW);
+    const maxY = Math.max(0, this.worldH - this.visibleH);
+    this.viewX = Math.min(Math.max(0, this.viewX), maxX);
+    this.viewY = Math.min(Math.max(0, this.viewY), maxY);
   }
 
   /** Step zoom in or out. Returns new zoom level. */
   stepZoom(direction: 1 | -1): number {
-    const levels = WebGL2WorldRenderer.ZOOM_LEVELS;
-    const curIdx = levels.indexOf(this.zoom);
-    const newIdx = Math.max(0, Math.min(levels.length - 1, curIdx + direction));
-    this.zoom = levels[newIdx];
+    const max = this.fitZoom * WebGL2WorldRenderer.MAX_ZOOM_FACTOR;
+    const next = direction > 0 ? this.zoom * 2 : this.zoom / 2;
+    // Never zoom out past the fitted level, which would expose empty margins.
+    this.zoom = Math.min(max, Math.max(this.fitZoom, next));
+    this.clampCamera();
     return this.zoom;
   }
 
@@ -365,6 +624,9 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
   /** Resize — update viewport after canvas dimension change. */
   onResize(): void {
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // The canvas aspect changed, so the zoom that covers it changed too.
+    this.recomputeFitZoom();
+    this.clampCamera();
   }
 
   /** Expose material cache for minimap rendering and client-side prediction. */
@@ -434,6 +696,7 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     gl.uniform2f(this.locs["u_camera"]!, this.viewX, this.viewY);
     gl.uniform2f(this.locs["u_viewport"]!, this.visibleW, this.visibleH);
     gl.uniform1f(this.locs["u_time"]!, time * 0.001);
+    gl.uniform1i(this.locs["u_hasEmissive"]!, this.hasEmissive ? 1 : 0);
 
     // Draw fullscreen quad
     gl.bindVertexArray(this.vao);
