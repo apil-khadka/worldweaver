@@ -1,0 +1,95 @@
+1
+00:00:00,000 --> 00:00:06,000
+What if players could shape one living world from any browser,
+while the browser itself did none of the heavy physics?
+
+2
+00:00:06,000 --> 00:00:15,200
+This is WorldWeaver: a multiplayer emergent world simulation
+where players apply forces, and the world decides what happens next.
+
+3
+00:00:17,600 --> 00:00:22,100
+This is WorldWeaver. Rain creates water.
+Water flows downhill and seeks its level.
+
+4
+00:00:22,100 --> 00:00:26,800
+Growth spreads vegetation where the conditions allow it.
+
+5
+00:00:26,800 --> 00:00:31,400
+Heat changes the environment and can ignite plants.
+
+6
+00:00:31,400 --> 00:00:36,700
+Every action costs influence, so players are shaping a shared ecosystem,
+not simply painting a canvas.
+
+7
+00:00:39,200 --> 00:00:43,200
+The world is shared in real time.
+
+8
+00:00:43,200 --> 00:00:48,000
+A second player can join, appear in the player count,
+and act on the same landscape.
+
+9
+00:00:48,000 --> 00:00:52,400
+What one player changes, the other player sees immediately
+because the server is authoritative.
+
+10
+00:00:54,400 --> 00:00:58,700
+The architecture is deliberately simple.
+
+11
+00:00:58,700 --> 00:01:04,800
+The Go server owns the simulation,
+advances it at sixty ticks per second, and persists world state.
+
+12
+00:01:04,800 --> 00:01:10,300
+WebSockets broadcast updates.
+Browsers handle input and rendering.
+
+13
+00:01:10,300 --> 00:01:15,000
+That makes the client thin, the state consistent,
+and the experience accessible from a modern browser.
+
+14
+00:01:17,267 --> 00:01:22,267
+Kiro was used throughout the entire project—from idea to shipment.
+
+15
+00:01:22,267 --> 00:01:27,267
+Steering files defined the product vision and technical boundaries.
+
+16
+00:01:27,267 --> 00:01:33,267
+Six specifications turned those boundaries into requirements,
+designs, and implementation tasks.
+
+17
+00:01:33,267 --> 00:01:42,000
+Hooks and tests kept everything verifiable as WorldWeaver grew
+into a multiplayer simulation with physics, networking, persistence,
+and a searchable element catalogue.
+
+18
+00:01:44,333 --> 00:01:49,000
+WorldWeaver makes a computationally rich world feel lightweight and immediate.
+
+19
+00:01:49,000 --> 00:01:53,133
+One server, many players, and emergent consequences from every action.
+
+20
+00:01:53,133 --> 00:01:56,833
+The world is expensive. The client is cheap.
+
+21
+00:01:56,833 --> 00:02:01,000
+WorldWeaver: one world, many forces, built with Kiro.
