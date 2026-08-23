@@ -490,6 +490,10 @@ export class WebGL2WorldRenderer implements IWorldRenderer {
     const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
     if (!gl) throw new Error("WebGL2 not available");
     this.gl = gl;
+    // Material textures use one byte per cell. The default unpack alignment of
+    // four makes WebGL calculate the wrong row stride for narrow/sub-region
+    // uploads, which can reject a valid snapshot and leave chunk-shaped holes.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
     this.program = createProgram(gl, VERT_SRC, FRAG_SRC);
     this.vao = this.setupQuad();
