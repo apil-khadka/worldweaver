@@ -120,14 +120,14 @@ func simulateCloud(w *world.World, x, y int) {
 	}
 
 	if w.RNG().Float64() < rainChance {
-		// Find the cell directly below
+		// Precipitation must conserve mass: the cloud becomes the raindrop rather
+		// than emitting one while persisting. Leaving the cloud in place turned
+		// every cloud into an endless water source, and a world left running
+		// flooded solid — 96% of cells occupied, with the surface never settling.
 		below := y + 1
-		if below < w.Height {
-			if w.GetMaterial(x, below) == world.MatEmpty {
-				// Cloud stays, spawn water below
-				w.SetMaterial(x, below, world.MatWater)
-				w.MarkDirty(x, below)
-			}
+		if below < w.Height && w.GetMaterial(x, below) == world.MatEmpty {
+			w.SetMaterial(x, below, world.MatWater)
+			w.SetMaterial(x, y, world.MatEmpty)
 		}
 	}
 }

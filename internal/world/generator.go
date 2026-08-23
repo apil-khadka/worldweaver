@@ -113,9 +113,9 @@ func (g *generator) generate() {
 			} else if frac >= 0.45 && frac < 0.75 {
 				// Forest valley: rich soil
 				switch {
-				case depth < 5:
+				case depth < 9:
 					w.Material[y*W+x] = MatSoil
-				case depth < 12:
+				case depth < 18:
 					if g.rng.Intn(100) < 60 {
 						w.Material[y*W+x] = MatSoil
 					} else {
@@ -125,12 +125,12 @@ func (g *generator) generate() {
 					w.Material[y*W+x] = MatRock
 				}
 			} else {
-				// Volcano / cliff zones: mostly rock
+				// Volcano / cliff zones: thin soil over rock
 				switch {
-				case depth < 2:
+				case depth < 4:
 					w.Material[y*W+x] = MatSoil
-				case depth < 6:
-					if g.rng.Intn(100) < 30 {
+				case depth < 10:
+					if g.rng.Intn(100) < 35 {
 						w.Material[y*W+x] = MatSoil
 					} else {
 						w.Material[y*W+x] = MatRock
@@ -306,6 +306,100 @@ func (g *generator) generate() {
 				idx := y*W + x
 				if w.Moisture[idx] < 150 {
 					w.Moisture[idx] = 150
+				}
+			}
+		}
+	}
+
+	// ── GENERAL SURFACE VEGETATION ──────────────────────────────────────────
+	// The forest pass above only covers roughly a quarter of the map width, and
+	// single-cell growth is invisible when the whole world is on screen. This
+	// pass spreads vegetation across every fertile surface and grows it upward
+	// into trees, so the landscape reads as living rather than as bare bedrock.
+	for x := range W {
+		frac := float64(x) / float64(W)
+
+		// Locate the topmost solid surface cell near the recorded height.
+		groundY := -1
+		var ground uint8
+		for dy := -3; dy <= 3; dy++ {
+			y := heights[x] + dy
+			if y < 3 || y >= H {
+				continue
+			}
+			m := w.Material[y*W+x]
+			if (m == MatSoil || m == MatSand) && w.Material[(y-1)*W+x] == MatEmpty {
+				groundY, ground = y, m
+				break
+			}
+		}
+		if groundY < 0 {
+			continue
+		}
+
+		// Biome determines how likely a tree is and how tall it grows.
+		chance, minH, maxH := 0, 0, 0
+		switch ground {
+		case MatSoil:
+			chance, minH, maxH = 48, 5, 14
+		case MatSand:
+			chance, minH, maxH = 7, 2, 4 // sparse desert scrub
+		default:
+			continue
+		}
+		if frac >= 0.30 && frac < 0.44 {
+			chance /= 4 // volcanic slopes stay mostly barren
+		}
+		if g.rng.Intn(100) >= chance {
+			continue
+		}
+
+		height := minH + g.rng.Intn(maxH-minH+1)
+
+		// Vegetation only persists where its roots find water: the simulation
+		// withers plants whose soil is bone dry. Seed enough moisture beneath a
+		// new tree for it to survive, rather than spawning growth that dies in
+		// the first few seconds.
+		for d := 0; d < 6; d++ {
+			ry := groundY + d
+			if ry >= H {
+				break
+			}
+			ri := ry*W + x
+			if (w.Material[ri] == MatSoil || w.Material[ri] == MatSand) && w.Moisture[ri] < 90 {
+				w.Moisture[ri] = 90
+			}
+		}
+
+		// Trunk.
+		topY := groundY - 1
+		for i := 0; i < height; i++ {
+			y := groundY - 1 - i
+			if y < 2 || w.Material[y*W+x] != MatEmpty {
+				break
+			}
+			w.Material[y*W+x] = MatPlant
+			topY = y
+		}
+
+		// Canopy: a small crown around the top of the trunk. Skipped for scrub,
+		// which should stay low and sparse.
+		if height >= 5 {
+			radius := 1 + g.rng.Intn(2)
+			for cy := topY - radius; cy <= topY+1; cy++ {
+				for cx := x - radius; cx <= x+radius; cx++ {
+					if cx < 0 || cx >= W || cy < 2 || cy >= H {
+						continue
+					}
+					// Round the crown off rather than leaving a square block.
+					dx := cx - x
+					dy := cy - topY
+					if dx*dx+dy*dy > (radius+1)*(radius+1) {
+						continue
+					}
+					if w.Material[cy*W+cx] == MatEmpty && g.rng.Intn(100) < 72 {
+						w.Material[cy*W+cx] = MatPlant
+					}
 				}
 			}
 		}

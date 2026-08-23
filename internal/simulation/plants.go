@@ -52,10 +52,22 @@ func simulatePlant(w *world.World, x, y int) {
 	hasMoisture := false
 	for _, d := range [][2]int{{0, 1}, {-1, 0}, {1, 0}, {0, -1}} {
 		nx, ny := x+d[0], y+d[1]
-		if w.GetMaterial(nx, ny) == world.MatSoil && w.GetMoisture(nx, ny) > 0 {
+		// Sand counts as a root substrate alongside soil, otherwise desert
+		// vegetation can never hold on even where the sand is damp.
+		m := w.GetMaterial(nx, ny)
+		if (m == world.MatSoil || m == world.MatSand) && w.GetMoisture(nx, ny) > 0 {
 			hasMoisture = true
 			break
 		}
+	}
+
+	// Cells partway up a trunk or out in a canopy are not themselves next to
+	// soil; they are fed through the stem below them. Treating them as
+	// waterless killed anything taller than a single cell within seconds, so a
+	// plant supported from below counts as sustained. If the base dies the
+	// support disappears and the rest of the plant withers from the bottom up.
+	if !hasMoisture && w.GetMaterial(x, y+1) == world.MatPlant {
+		hasMoisture = true
 	}
 
 	if !hasMoisture {
