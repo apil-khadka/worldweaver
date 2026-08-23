@@ -127,7 +127,7 @@ func simulateCreature(w *world.World, x, y int, t Trait) {
 	}
 
 	// Creatures update on a slower schedule than materials.
-	if w.Tick%creatureUpdateInterval != 0 {
+	if w.Tick.Load()%creatureUpdateInterval != 0 {
 		return
 	}
 

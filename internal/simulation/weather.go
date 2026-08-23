@@ -97,7 +97,7 @@ func simulateCloud(w *world.World, x, y int) {
 	}
 
 	// Wind drift: move cloud horizontally based on global wind direction
-	windDir := GlobalWindDirection(w.Tick)
+	windDir := GlobalWindDirection(w.Tick.Load())
 	if windDir != 0 {
 		nx := x + windDir
 		if w.GetMaterial(nx, y) == world.MatEmpty {

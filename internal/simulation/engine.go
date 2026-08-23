@@ -25,6 +25,12 @@ type Engine struct {
 	actionMu sync.Mutex
 	actions  []PlayerAction
 
+	// postTicks run at the end of every tick, on the simulation goroutine.
+	// They are the sanctioned way to observe or broadcast world state:
+	// anything that reads the world from another goroutine is a data race.
+	postTickMu sync.Mutex
+	postTicks  []func(w *world.World)
+
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }
@@ -52,17 +58,29 @@ func (e *Engine) Stop() {
 	log.Println("Simulation engine stopped")
 }
 
+// AddPostTick registers fn to run at the end of every simulation tick, on
+// the simulation goroutine. This is the only supported way to observe world
+// state outside this package: the world belongs to the running loop, and any
+// concurrent reader is a data race. Safe to call before or after Start.
+func (e *Engine) AddPostTick(fn func(w *world.World)) {
+	e.postTickMu.Lock()
+	e.postTicks = append(e.postTicks, fn)
+	e.postTickMu.Unlock()
+}
+
 // EnqueueAction safely adds a player action to be processed on the next tick.
-// Wakes the target chunk and its neighbors to ensure the action takes effect.
+// It is safe to call from any goroutine; the affected chunks are woken when
+// the action is applied, on the simulation goroutine.
 func (e *Engine) EnqueueAction(a PlayerAction) {
 	e.actionMu.Lock()
 	e.actions = append(e.actions, a)
 	e.actionMu.Unlock()
+}
 
-	// Wake the chunk(s) affected by this action so they are simulated.
-	w := e.world
+// wakeActionArea wakes the chunks covered by an action so it takes effect
+// even in a sleeping region. Runs on the simulation goroutine only.
+func wakeActionArea(w *world.World, a PlayerAction) {
 	w.WakeChunkAt(a.X, a.Y)
-	// Also wake chunks covered by the action radius.
 	for _, dy := range []int{-a.Radius, 0, a.Radius} {
 		for _, dx := range []int{-a.Radius, 0, a.Radius} {
 			w.WakeChunkAt(a.X+dx, a.Y+dy)
@@ -97,14 +115,16 @@ func (e *Engine) tick() {
 	w := e.world
 	w.ClearMoveFlags()
 
-	// Apply player actions (these already woke chunks in EnqueueAction)
+	// Apply player actions, waking their chunks first so sleeping regions
+	// still react. Waking here keeps chunk state private to the tick.
 	for _, a := range actions {
+		wakeActionArea(w, a)
 		applyAction(w, a)
 	}
 
 	// Advance simulation chunk-by-chunk, skipping sleeping chunks.
 	// Within each active chunk: bottom-to-top, alternating horizontal direction.
-	leftToRight := w.Tick%2 == 0
+	leftToRight := w.Tick.Load()%2 == 0
 	chunkSize := w.ChunkSize
 
 	for cy := w.ChunkH - 1; cy >= 0; cy-- {
@@ -179,13 +199,24 @@ func (e *Engine) tick() {
 
 	// Counting non-empty cells is O(width*height), so sample it at ~2 Hz
 	// instead of every tick to keep the simulation loop cheap.
-	if w.Tick%30 == 0 {
+	if w.Tick.Load()%30 == 0 {
 		e.metrics.ActiveCells.Store(int64(countNonEmptyCells(w)))
 	}
 
-	w.Tick++
+	w.Tick.Add(1)
 	elapsed := time.Since(start)
 	e.metrics.RecordTick(elapsed)
+
+	// Hand the finished tick to observers (broadcast, metrics, persistence).
+	// Running these here serializes every world reader with the simulation,
+	// which is what makes the world safe to share at all.
+	e.postTickMu.Lock()
+	hooks := make([]func(w *world.World), len(e.postTicks))
+	copy(hooks, e.postTicks)
+	e.postTickMu.Unlock()
+	for _, fn := range hooks {
+		fn(w)
+	}
 }
 
 // countNonEmptyCells reports how many cells currently hold material.

@@ -68,7 +68,7 @@ const (
 // Called once per tick from the engine; almost every call returns immediately on
 // the interval check.
 func recoverEcosystem(w *world.World) {
-	if w.Tick%ecoCheckInterval != 0 {
+	if w.Tick.Load()%ecoCheckInterval != 0 {
 		return
 	}
 

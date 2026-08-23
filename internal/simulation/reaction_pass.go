@@ -73,7 +73,7 @@ var reactionNeighbours = [4][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 // The pass is also spaced over reactionInterval ticks, so the full-grid scan happens
 // at 20 Hz rather than 60 Hz.
 func simulateReactions(w *world.World) {
-	if w.Tick%reactionInterval != 0 {
+	if w.Tick.Load()%reactionInterval != 0 {
 		return
 	}
 
@@ -110,7 +110,7 @@ func simulateReactions(w *world.World) {
 // motionless, so its chunk sleeps, and cooling that honoured sleep would leave it at
 // 3000 °C forever and re-ignite anything placed near it much later.
 func relaxTemperatures(w *world.World) {
-	if w.Tick%relaxInterval != 0 {
+	if w.Tick.Load()%relaxInterval != 0 {
 		return
 	}
 

@@ -112,7 +112,7 @@ func simulatePlant(w *world.World, x, y int) {
 	// Attempt to spread to an adjacent empty cell that is on soil
 	dirs := [][2]int{{-1, 0}, {1, 0}, {0, -1}}
 	// Shuffle direction preference using tick for variety
-	start := int(w.Tick) % len(dirs)
+	start := int(w.Tick.Load()) % len(dirs)
 	for offset := range len(dirs) {
 		d := dirs[(start+offset)%len(dirs)]
 		nx, ny := x+d[0], y+d[1]

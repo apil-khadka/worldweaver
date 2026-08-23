@@ -288,7 +288,7 @@ func simulateCarrion(w *world.World, x, y int) {
 // so repeated passes do not always favour the same direction.
 func neighbourOrder(w *world.World, x, y int) [4][2]int {
 	base := [4][2]int{{0, 1}, {0, -1}, {-1, 0}, {1, 0}}
-	if (x+y+int(w.Tick))%2 == 0 {
+	if (x+y+int(w.Tick.Load()))%2 == 0 {
 		return [4][2]int{base[3], base[2], base[1], base[0]}
 	}
 	return base

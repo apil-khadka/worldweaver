@@ -29,7 +29,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/worldweaver/worldweaver/internal/world"
 )
@@ -75,27 +74,6 @@ func Load(dir string, w *world.World) error {
 	return readSnapshot(f, w)
 }
 
-// SavePeriodic starts a background goroutine that saves a snapshot every
-// interval.  The returned cancel function stops the goroutine.
-func SavePeriodic(dir string, w *world.World, interval time.Duration) (cancel func()) {
-	stop := make(chan struct{})
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-stop:
-				return
-			case <-t.C:
-				if err := Save(dir, w); err != nil {
-					// Log but do not crash — persistence errors are non-fatal.
-					fmt.Fprintf(os.Stderr, "snapshot save error: %v\n", err)
-				}
-			}
-		}
-	}()
-	return func() { close(stop) }
-}
 
 // ---- internal helpers ----
 
@@ -118,7 +96,7 @@ func writeSnapshot(w io.Writer, world *world.World) error {
 	if err := binary.Write(w, le, world.Seed); err != nil {
 		return err
 	}
-	if err := binary.Write(w, le, world.Tick); err != nil {
+	if err := binary.Write(w, le, world.Tick.Load()); err != nil {
 		return err
 	}
 	// 16 reserved bytes
@@ -177,9 +155,11 @@ func readSnapshot(r io.Reader, w *world.World) error {
 	if err := binary.Read(r, le, &w.Seed); err != nil {
 		return err
 	}
-	if err := binary.Read(r, le, &w.Tick); err != nil {
+	var tick uint64
+	if err := binary.Read(r, le, &tick); err != nil {
 		return err
 	}
+	w.Tick.Store(tick)
 	// skip 16 reserved bytes
 	if _, err := io.ReadFull(r, make([]byte, 16)); err != nil {
 		return err

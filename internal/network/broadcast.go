@@ -9,40 +9,35 @@ import (
 )
 
 // BroadcastChunkUpdates sends all dirty chunks to all connected clients.
-// It is called by the simulation loop after each tick (or every N ticks).
+// Must run on the simulation goroutine (via the engine's post-tick hook):
+// it reads world state, which belongs to the tick.
 //
 // Design invariant: this function must never block the simulation goroutine.
 // All writes go into per-client send queues that are drained asynchronously.
+// Client sends happen under the hub read lock so a client unregistering
+// cannot race with delivery.
 func (h *Hub) BroadcastChunkUpdates(w *world.World) {
-	h.mu.RLock()
-	clients := make([]*Client, 0, len(h.clients))
-	for c := range h.clients {
-		clients = append(clients, c)
-	}
-	h.mu.RUnlock()
-
-	if len(clients) == 0 {
-		w.ClearDirty()
-		return
-	}
-
-	// Collect dirty chunks
+	// Collect dirty chunks before touching the client map; this reads the
+	// world and is serialized with the tick by the caller.
 	updates := buildChunkUpdates(w)
 	if len(updates) == 0 {
+		w.ClearDirty()
 		return
 	}
 
 	msg, _ := json.Marshal(ChunkUpdateMsg{
 		Type:   MsgChunkUpdate,
-		Tick:   w.Tick,
+		Tick:   w.Tick.Load(),
 		Chunks: updates,
 	})
 
 	var totalBytes int64
-	for _, c := range clients {
+	h.mu.RLock()
+	for c := range h.clients {
 		c.sendRaw(msg)
 		totalBytes += int64(len(msg))
 	}
+	h.mu.RUnlock()
 
 	// Record outbound bytes for metrics
 	if h.metrics != nil {
@@ -122,7 +117,7 @@ func SendFullSnapshot(c *Client, w *world.World) {
 	encoded := base64.StdEncoding.EncodeToString(data)
 	c.sendJSON(map[string]any{
 		"type": MsgWorldSnapshot,
-		"tick": w.Tick,
+		"tick": w.Tick.Load(),
 		"x":    x,
 		"y":    y,
 		"w":    ww,
@@ -164,7 +159,7 @@ func buildChunkUpdates(w *world.World) []ChunkUpdateEntry {
 		entries = append(entries, ChunkUpdateEntry{
 			CX:   chunk.X,
 			CY:   chunk.Y,
-			Tick: w.Tick,
+			Tick: w.Tick.Load(),
 			Data: data,
 		})
 	}

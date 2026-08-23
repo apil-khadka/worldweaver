@@ -2,7 +2,10 @@
 // and chunk bookkeeping. It does NOT contain simulation logic.
 package world
 
-import "math/rand"
+import (
+	"math/rand"
+	"sync/atomic"
+)
 
 // World holds the full authoritative state of the simulated environment.
 type World struct {
@@ -32,8 +35,13 @@ type World struct {
 	ChunkH     int // height in chunks
 	ChunkSize  int // cells per chunk edge (e.g. 32 or 64)
 
-	// Simulation tick counter
-	Tick uint64
+	// Simulation tick counter.
+	// Atomic because it is read from HTTP handler goroutines (the WebSocket
+	// welcome message) while the simulation loop increments it. Everything
+	// else that reads world state does so from the post-tick hook, on the
+	// simulation goroutine; the tick counter is the one deliberate exception
+	// to keep connection setup lock-free.
+	Tick atomic.Uint64
 
 	rng *rand.Rand
 }

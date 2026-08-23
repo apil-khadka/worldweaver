@@ -48,7 +48,7 @@ func simulateWater(w *world.World, x, y int) {
 	}
 
 	// Diagonal fall
-	leftFirst := (x+int(w.Tick))%2 == 0
+	leftFirst := (x+int(w.Tick.Load()))%2 == 0
 	if leftFirst {
 		if tryDiagWater(w, x, y, -1) {
 			return

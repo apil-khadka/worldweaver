@@ -49,11 +49,11 @@ import (
 )
 
 func main() {
-	addr    := flag.String("addr", ":8080", "HTTP/WebSocket listen address")
+	addr := flag.String("addr", ":8080", "HTTP/WebSocket listen address")
 	sizeName := flag.String("size", "", "World size preset: small, medium, large, huge (overrides -width/-height)")
-	worldW  := flag.Int("width", 2048, "World width in cells")
-	worldH  := flag.Int("height", 768, "World height in cells")
-	seed    := flag.Int64("seed", 20260823, "World generation seed")
+	worldW := flag.Int("width", 2048, "World width in cells")
+	worldH := flag.Int("height", 768, "World height in cells")
+	seed := flag.Int64("seed", 20260823, "World generation seed")
 	snapDir := flag.String("snapdir", ".", "Directory for world snapshots")
 	flag.Parse()
 
@@ -75,7 +75,7 @@ func main() {
 		log.Printf("No snapshot found (%v) — generating fresh world", err)
 		w.Generate()
 	} else {
-		log.Printf("Restored world from snapshot at tick %d", w.Tick)
+		log.Printf("Restored world from snapshot at tick %d", w.Tick.Load())
 	}
 
 	// ── Metrics ──────────────────────────────────────────────────────────────
@@ -83,6 +83,13 @@ func main() {
 
 	// ── Simulation ───────────────────────────────────────────────────────────
 	eng := simulation.NewEngine(w, m)
+
+	// Periodic snapshot cadence. Saving runs on the simulation goroutine via
+	// the post-tick hook: writing the world from a separate goroutine would
+	// race with the tick and produce torn snapshots. The cost is one tick
+	// hiccup every five minutes, which beats a corrupt save.
+	const persistInterval = 5 * time.Minute
+	lastSave := time.Now()
 
 	// ── Network ──────────────────────────────────────────────────────────────
 	sb := game.NewScoreboard()
@@ -131,34 +138,28 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// ── Broadcast pipeline ───────────────────────────────────────────────────
-	// Runs independently of the simulation loop.  Frequency is lower than TPS
-	// so bandwidth stays bounded even at high cell counts.
-	go func() {
-		ticker := time.NewTicker(time.Second / 20) // 20 Hz network updates
-		defer ticker.Stop()
-		for range ticker.C {
-			hub.BroadcastChunkUpdates(w)
-		}
-	}()
-
-	// Metrics broadcast — every second
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
+	// ── Post-tick pipeline ───────────────────────────────────────────────
+	// Chunk broadcasts and snapshots are wired by NewHub. Everything else
+	// that reads the world (stability metrics, goals, persistence) runs here,
+	// serialized with the tick.
+	eng.AddPostTick(func(w *world.World) {
+		if w.Tick.Load()%simulation.TargetTPS == 0 { // 1 Hz
 			snap := m.Snapshot()
 			stability := game.Compute(w)
-			hub.BroadcastMetrics(snap, stability.Overall, w.Tick)
+			hub.BroadcastMetrics(snap, stability.Overall, w.Tick.Load())
 			// Regenerate influence for all connected players
 			hub.RegenerateAllInfluence()
 			// Tick cooperative goals (check progress, rotate if due)
 			hub.TickGoals(stability.Overall)
 		}
-	}()
 
-	// Periodic persistence — every 5 minutes
-	cancelSnap := persistence.SavePeriodic(*snapDir, w, 5*time.Minute)
+		if time.Since(lastSave) >= persistInterval {
+			lastSave = time.Now()
+			if err := persistence.Save(*snapDir, w); err != nil {
+				log.Printf("snapshot save error: %v", err)
+			}
+		}
+	})
 
 	// ── Start ────────────────────────────────────────────────────────────────
 	eng.Start()
@@ -176,7 +177,6 @@ func main() {
 	<-sigC
 
 	log.Println("Shutting down…")
-	cancelSnap()
 	eng.Stop()
 
 	if err := persistence.Save(*snapDir, w); err != nil {

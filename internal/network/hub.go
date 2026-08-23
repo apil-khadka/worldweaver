@@ -49,6 +49,12 @@ type Hub struct {
 	chatLimits   map[uint32]*chatRateEntry
 	chatLimitsMu sync.Mutex
 
+	// Clients waiting for a full world snapshot. Requests come in from read
+	// pumps; delivery happens on the simulation goroutine so the world is
+	// never read concurrently with a tick.
+	snapMu      sync.Mutex
+	snapPending map[*Client]struct{}
+
 	// Power combo detection
 	recentPowers   []powerEvent
 	recentPowersMu sync.Mutex
@@ -68,8 +74,13 @@ type powerEvent struct {
 }
 
 // NewHub creates a Hub wired to the given world and engine.
+//
+// The hub registers its own post-tick pass on the engine, so chunk broadcasts
+// and queued snapshots are delivered automatically and always serialized with
+// the simulation. Servers and tests that build a hub therefore cannot forget
+// the wiring — which is exactly how past data races crept in.
 func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics, sb *game.Scoreboard, worldName string, auth *game.AuthManager, worldMgr *game.WorldManager) *Hub {
-	return &Hub{
+	h := &Hub{
 		clients:       make(map[*Client]struct{}),
 		world:         w,
 		engine:        eng,
@@ -82,8 +93,24 @@ func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics, sb *game
 		Access:        game.NewAccessRegistry(),
 		Contributions: game.NewContributionLedger(),
 		chatLimits:    make(map[uint32]*chatRateEntry),
+		snapPending:   make(map[*Client]struct{}),
 		recentPowers:  make([]powerEvent, 0, 64),
 	}
+	eng.AddPostTick(h.postTickPass)
+	return h
+}
+
+// broadcastEveryTicks controls how often dirty chunks and pending snapshots
+// go out: every Nth tick, i.e. ~20 Hz at the 60 TPS target.
+const broadcastEveryTicks = 3
+
+// postTickPass runs on the simulation goroutine at the end of a tick.
+func (h *Hub) postTickPass(w *world.World) {
+	if w.Tick.Load()%broadcastEveryTicks != 0 {
+		return
+	}
+	h.BroadcastChunkUpdates(w)
+	h.SendPendingSnapshots()
 }
 
 func (h *Hub) register(c *Client) {
@@ -96,15 +123,51 @@ func (h *Hub) register(c *Client) {
 	h.BroadcastPlayerJoin(c.Player.ID)
 }
 
+// unregister removes a client from the hub.
+//
+// The send channel is deliberately never closed. Broadcasts snapshot the
+// client list and then write to each queue; a close here could interleave
+// with such a write and panic. Instead the write pump exits through context
+// cancellation when the connection handler returns, and unsent messages are
+// simply garbage-collected with the client.
 func (h *Hub) unregister(c *Client) {
+	h.snapMu.Lock()
+	delete(h.snapPending, c)
+	h.snapMu.Unlock()
+
 	h.mu.Lock()
 	delete(h.clients, c)
 	h.mu.Unlock()
-	close(c.send)
 	h.metrics.PlayerCount.Add(-1)
 	h.Scoreboard.PlayerDisconnected(h.worldIDOf(c), c.Player.ID)
 	log.Printf("hub: player %d unregistered (total %d)", c.Player.ID, h.metrics.PlayerCount.Load())
 	h.BroadcastPlayerLeave(c.Player.ID)
+}
+
+// RequestSnapshot queues a client to receive a full world snapshot on the
+// next post-tick pass. Safe to call from any goroutine.
+func (h *Hub) RequestSnapshot(c *Client) {
+	h.snapMu.Lock()
+	h.snapPending[c] = struct{}{}
+	h.snapMu.Unlock()
+}
+
+// SendPendingSnapshots delivers queued full snapshots. Must run on the
+// simulation goroutine (via the engine's post-tick hook): building a
+// snapshot reads the whole visible region of the world.
+func (h *Hub) SendPendingSnapshots() {
+	h.snapMu.Lock()
+	pending := h.snapPending
+	h.snapPending = make(map[*Client]struct{})
+	h.snapMu.Unlock()
+
+	for c := range pending {
+		if time.Since(c.lastSnapshot) < snapshotMinInterval {
+			continue
+		}
+		c.lastSnapshot = time.Now()
+		SendFullSnapshot(c, h.world)
+	}
 }
 
 // handlePowerInput validates an incoming power request and enqueues it on

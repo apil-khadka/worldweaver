@@ -39,14 +39,11 @@ type Client struct {
 	lastSnapshot time.Time
 }
 
-// maybeSendSnapshot sends a full snapshot for the client's current viewport,
-// unless one was sent very recently.
-func (c *Client) maybeSendSnapshot() {
-	if time.Since(c.lastSnapshot) < snapshotMinInterval {
-		return
-	}
-	c.lastSnapshot = time.Now()
-	SendFullSnapshot(c, c.hub.world)
+// requestSnapshot queues this client for a full world snapshot. The snapshot
+// itself is built on the simulation goroutine by SendPendingSnapshots: reading
+// the world here would race with the running simulation tick.
+func (c *Client) requestSnapshot() {
+	c.hub.RequestSnapshot(c)
 }
 
 // newClient constructs a Client and immediately starts its write pump.
@@ -84,11 +81,7 @@ func (c *Client) writePump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case msg, ok := <-c.send:
-			if !ok {
-				// Hub closed the channel.
-				return
-			}
+		case msg := <-c.send:
 			wctx, cancel := context.WithTimeout(ctx, writeTimeout)
 			err := c.conn.Write(wctx, websocket.MessageText, msg)
 			cancel()
@@ -128,10 +121,10 @@ func (c *Client) readPump(ctx context.Context) {
 			var msg HelloMsg
 			if err := json.Unmarshal(data, &msg); err == nil {
 				c.Player.SetCamera(0, 0, msg.ViewW, msg.ViewH)
-				// Now that the visible region is known, send the world the
-				// client can actually draw. Sending before this point produced
-				// an empty snapshot, because the camera was still 0x0.
-				c.maybeSendSnapshot()
+				// Now that the visible region is known, queue the snapshot the
+				// client can actually draw. It is sent from the post-tick hook,
+				// because building it here would read the world mid-tick.
+				c.requestSnapshot()
 			}
 
 		case MsgPowerInput:
@@ -151,7 +144,7 @@ func (c *Client) readPump(ctx context.Context) {
 			var msg ViewportMsg
 			if err := json.Unmarshal(data, &msg); err == nil {
 				c.Player.SetCamera(msg.X, msg.Y, msg.W, msg.H)
-				c.maybeSendSnapshot()
+				c.requestSnapshot()
 			}
 
 		case MsgPing:

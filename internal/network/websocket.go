@@ -672,7 +672,7 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		PlayerID: c.Player.ID,
 		WorldW:   h.world.Width,
 		WorldH:   h.world.Height,
-		Tick:     h.world.Tick,
+		Tick:     h.world.Tick.Load(),
 	})
 
 	// The snapshot is deliberately not sent here. The client's visible region is

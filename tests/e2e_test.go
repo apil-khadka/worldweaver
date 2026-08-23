@@ -22,7 +22,8 @@ import (
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // e2eServer starts a full WorldWeaver server on a random port, including the
-// broadcast pipeline (chunk updates at 20Hz, metrics at 1Hz) just like main.go.
+// post-tick pipeline (chunk updates at ~20Hz, metrics at 1Hz) just like main.go,
+// so world reads are serialized with the simulation exactly as in production.
 func e2eServer(t *testing.T) (addr string, w *world.World, eng *simulation.Engine, cleanup func()) {
 	t.Helper()
 
@@ -48,41 +49,20 @@ func e2eServer(t *testing.T) (addr string, w *world.World, eng *simulation.Engin
 		Handler: router,
 	}
 
+	// Chunk updates are wired by NewHub's post-tick pass. Metrics and
+	// influence regen run here at 1 Hz, same as cmd/server/main.go; running
+	// them on the engine hook keeps every world read race-free.
+	eng.AddPostTick(func(w *world.World) {
+		if w.Tick.Load()%simulation.TargetTPS != 0 {
+			return
+		}
+		snap := m.Snapshot()
+		stability := game.Compute(w)
+		hub.BroadcastMetrics(snap, stability.Overall, w.Tick.Load())
+		hub.RegenerateAllInfluence()
+	})
+
 	eng.Start()
-
-	// Broadcast pipeline — same as cmd/server/main.go
-	stopBroadcast := make(chan struct{})
-
-	// Chunk updates at 20 Hz
-	go func() {
-		ticker := time.NewTicker(time.Second / 20)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stopBroadcast:
-				return
-			case <-ticker.C:
-				hub.BroadcastChunkUpdates(w)
-			}
-		}
-	}()
-
-	// Metrics broadcast at 1 Hz
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stopBroadcast:
-				return
-			case <-ticker.C:
-				snap := m.Snapshot()
-				stability := game.Compute(w)
-				hub.BroadcastMetrics(snap, stability.Overall, w.Tick)
-				hub.RegenerateAllInfluence()
-			}
-		}
-	}()
 
 	go srv.ListenAndServe()
 
@@ -90,7 +70,6 @@ func e2eServer(t *testing.T) (addr string, w *world.World, eng *simulation.Engin
 	time.Sleep(100 * time.Millisecond)
 
 	cleanup = func() {
-		close(stopBroadcast)
 		eng.Stop()
 		srv.Close()
 	}
@@ -525,8 +504,8 @@ func TestE2ECursorBroadcast(t *testing.T) {
 	// Client A sends cursor message
 	clientA.send(t, map[string]interface{}{
 		"type":  "cursor",
-		"x":    100,
-		"y":    50,
+		"x":     100,
+		"y":     50,
 		"power": 0,
 	})
 
@@ -594,8 +573,8 @@ func TestE2EConcurrentLoad(t *testing.T) {
 
 	// Connect all clients simultaneously
 	type rawConn struct {
-		conn *websocket.Conn
-		ctx  context.Context
+		conn   *websocket.Conn
+		ctx    context.Context
 		cancel context.CancelFunc
 	}
 	clients := make([]*rawConn, numClients)

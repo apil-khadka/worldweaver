@@ -36,7 +36,7 @@ func simulateSoil(w *world.World, x, y int) {
 		return
 	}
 
-	if w.Tick%soilSproutInterval != 0 {
+	if w.Tick.Load()%soilSproutInterval != 0 {
 		return
 	}
 	if w.Moisture[i] < soilSproutMoisture {

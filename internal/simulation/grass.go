@@ -61,7 +61,7 @@ func simulateGrass(w *world.World, x, y int) {
 		return
 	}
 
-	if w.Tick%grassSpreadInterval != 0 {
+	if w.Tick.Load()%grassSpreadInterval != 0 {
 		return
 	}
 
@@ -84,7 +84,7 @@ func simulateGrass(w *world.World, x, y int) {
 
 	// Spread sideways onto adjacent bare ground.
 	dirs := [2]int{-1, 1}
-	first := int(w.Tick) % 2
+	first := int(w.Tick.Load()) % 2
 	for k := 0; k < 2; k++ {
 		dx := dirs[(first+k)%2]
 		nx := x + dx
