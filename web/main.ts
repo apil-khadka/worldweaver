@@ -27,6 +27,9 @@ import { Minimap } from "./minimap.js";
 import { AudioEngine } from "./audio.js";
 import { ChatSystem } from "./chat.js";
 import { SocialSystem } from "./social.js";
+import {
+  BrushOverlay, MAT_HERBIVORE, MAT_SHEEP, MAT_PREDATOR,
+} from "./brush-overlay.js";
 
 // ── Lobby ──────────────────────────────────────────────────────────────────
 const lobby = new Lobby();
@@ -60,6 +63,11 @@ async function main() {
   const minimapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
   const minimap  = new Minimap(minimapCanvas, renderer, canvas);
 
+  // Brush ring + creature markers. Needs the input handler for the pointer
+  // position and the active tool, and the renderer for the camera and cells.
+  const brushCanvas = document.getElementById("brush-overlay") as HTMLCanvasElement;
+  const brushOverlay = new BrushOverlay(brushCanvas, canvas, renderer, input);
+
   // Render scale trades sharpness for frame rate: the canvas backing store is
   // smaller than its displayed size, so the shader runs over fewer fragments
   // while CSS stretches the result back out.
@@ -77,6 +85,7 @@ async function main() {
     // Overlays draw UI, not world content, so they stay at full resolution.
     overlayCanvas.width  = cssW;
     overlayCanvas.height = cssH;
+    brushOverlay.resize(cssW, cssH);
 
     activeRenderer.onResize();
     effects.resize(cssW, cssH);
@@ -90,6 +99,116 @@ async function main() {
   ui.attach();
   effects.attach();
   minimap.start();
+  brushOverlay.start();
+
+  // ── Element drawer ────────────────────────────────────────────────────────
+  // Built from GET /api/elements, so the server's registry is the single source of
+  // truth for what exists, what colour it is, and what it reacts with. The old
+  // palette strip carried its own hardcoded copy of that list.
+  const elementDrawer = new ElementDrawer((id) => {
+    // Selecting an element implies placing it: the Place tool is what puts material
+    // into the world, so choosing from the drawer switches to it rather than making
+    // the player select the tool separately and wonder why nothing happened.
+    input.setMaterial(id);
+    input.selectPlaceTool();
+  });
+
+  elementDrawer.load().then((ok) => {
+    if (!ok) return;
+
+    // Push the server's colours into the renderer so a newly registered element
+    // renders correctly without a frontend edit. Previously the palette texture was
+    // hardcoded in three renderer files and an element absent from them drew as
+    // transparent — present in the world and invisible on screen.
+    if ("setPaletteEntries" in activeRenderer) {
+      (activeRenderer as unknown as {
+        setPaletteEntries(e: Array<{ id: number; colour: [number, number, number, number] }>): void;
+      }).setPaletteEntries(
+        elementDrawer.all().map((e) => ({ id: e.id, colour: e.colour })),
+      );
+    }
+  });
+
+  // X opens the drawer; Escape closes it. Both are ignored while a text field has
+  // focus so typing in chat cannot toggle the UI.
+  window.addEventListener("keydown", (e) => {
+    const t = e.target as HTMLElement | null;
+    const tag = t?.tagName?.toLowerCase();
+    if (tag === "input" || tag === "textarea" || t?.isContentEditable) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key.toLowerCase() === "x") {
+      elementDrawer.setOpen(!elementDrawer.isOpen());
+    } else if (e.key === "Escape" && elementDrawer.isOpen()) {
+      elementDrawer.setOpen(false);
+    }
+  });
+
+  // ── Creature legend ───────────────────────────────────────────────────────
+  // Counts come from the overlay's own visible-area scan, so the legend and the
+  // markers can never disagree about what is on screen.
+  const legendEl    = document.getElementById("creature-legend");
+  const legendSheep = document.getElementById("legend-sheep");
+  const legendGraz  = document.getElementById("legend-grazer");
+  const legendPred  = document.getElementById("legend-predator");
+  setInterval(() => {
+    if (legendSheep) legendSheep.textContent = String(brushOverlay.counts[MAT_SHEEP]);
+    if (legendGraz)  legendGraz.textContent  = String(brushOverlay.counts[MAT_HERBIVORE]);
+    if (legendPred)  legendPred.textContent  = String(brushOverlay.counts[MAT_PREDATOR]);
+  }, 400);
+
+  const creatureToggle = document.getElementById("creature-toggle");
+  const setMarkers = (on: boolean) => {
+    brushOverlay.showCreatures = on;
+    legendEl?.classList.toggle("markers-off", !on);
+    creatureToggle?.querySelector(".legend-dot")?.classList.toggle("legend-dot--on", on);
+  };
+  creatureToggle?.addEventListener("click", () => setMarkers(!brushOverlay.showCreatures));
+  window.addEventListener("keydown", (e) => {
+    if (e.key.toLowerCase() !== "c") return;
+    const t = e.target as HTMLElement | null;
+    const tag = t?.tagName?.toLowerCase();
+    if (tag === "input" || tag === "textarea" || t?.isContentEditable) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    setMarkers(!brushOverlay.showCreatures);
+  });
+
+  // ── Shared goal ───────────────────────────────────────────────────────────
+  // The server has broadcast goal_update since goals were added; nothing on the
+  // client listened, so the objective was invisible. It drives a banner now.
+  const goalBanner   = document.getElementById("goal-banner");
+  const goalTextEl   = document.getElementById("goal-text");
+  const goalProgEl   = document.getElementById("goal-progress");
+  const goalTargetEl = document.getElementById("goal-target");
+  const goalFillEl   = document.getElementById("goal-fill");
+  let lastGoalText = "";
+  let lastGoalDone = false;
+
+  network.callbacks.onGoalUpdate = (g) => {
+    if (goalTextEl)   goalTextEl.textContent   = g.goalText || "No active goal";
+    if (goalProgEl)   goalProgEl.textContent   = String(g.progress);
+    if (goalTargetEl) goalTargetEl.textContent = String(g.target);
+    if (goalFillEl) {
+      const pct = g.target > 0
+        ? Math.max(0, Math.min(100, (g.progress / g.target) * 100))
+        : 0;
+      goalFillEl.style.width = `${pct}%`;
+    }
+    goalBanner?.classList.toggle("goal-done", g.completed);
+
+    // Flash only on a transition, not on every 1 Hz refresh, or the banner
+    // would pulse forever once a goal completed.
+    const rotated  = g.goalText !== lastGoalText;
+    const justDone = g.completed && !lastGoalDone;
+    if ((rotated || justDone) && goalBanner) {
+      goalBanner.classList.remove("goal-flash");
+      void goalBanner.offsetWidth; // restart the animation
+      goalBanner.classList.add("goal-flash");
+      if (justDone) (window as any).__wwAudio?.playScoreDing?.();
+    }
+    lastGoalText = g.goalText;
+    lastGoalDone = g.completed;
+  };
 
   // Hide loading overlay on connection
   const origOnConnected = network.callbacks.onConnected;

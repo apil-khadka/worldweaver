@@ -81,6 +81,15 @@ export interface NetworkCallbacks {
   onPingLocation?(playerID: number, x: number, y: number): void;
   onEmote?(playerID: number, emote: string, x: number, y: number): void;
   onCombo?(playerIDs: number[], powers: number[], x: number, y: number): void;
+  onGoalUpdate?(g: GoalState): void;
+}
+
+/** Cooperative goal state broadcast by the server. */
+export interface GoalState {
+  goalText:  string;
+  progress:  number;
+  target:    number;
+  completed: boolean;
 }
 
 export class WorldNetwork {
@@ -277,6 +286,15 @@ export class WorldNetwork {
           msg["x"] as number,
           msg["y"] as number,
         );
+        break;
+
+      case "goal_update":
+        this.callbacks.onGoalUpdate?.({
+          goalText:  msg["goalText"]  as string,
+          progress:  msg["progress"]  as number,
+          target:    msg["target"]    as number,
+          completed: msg["completed"] as boolean,
+        });
         break;
 
       case "error":

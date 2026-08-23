@@ -15,13 +15,98 @@ type LevelThreshold struct {
 	PowerRadius  int
 }
 
-// LevelThresholds maps level → unlock data. Level 1 is the default (no threshold).
-var LevelThresholds = []LevelThreshold{
-	{Score: 0, MaxInfluence: 100, InflRegen: 0.5, PowerRadius: 24},      // Level 1
-	{Score: 100, MaxInfluence: 100, InflRegen: 0.5, PowerRadius: 28},    // Level 2: larger radius
-	{Score: 500, MaxInfluence: 100, InflRegen: 0.8, PowerRadius: 28},    // Level 3: faster regen
-	{Score: 2000, MaxInfluence: 100, InflRegen: 0.8, PowerRadius: 28},   // Level 4: Life power unlocked
-	{Score: 10000, MaxInfluence: 150, InflRegen: 0.8, PowerRadius: 28},  // Level 5: max influence 150
+// Progression curve constants.
+//
+// The old curve was five levels at [0, 100, 500, 2000, 10000] against scoring that
+// awarded a point per CELL affected. A radius-8 brush covers 197 cells, so one Rain
+// application scored 591 and a second of holding the button scored 4,728 — max level
+// arrived in 2.1 seconds. At the level-1 radius cap of 24 it arrived in 0.23
+// seconds. The curve was not the problem on its own; it was overwhelmed because
+// reward grew as the square of the brush radius while thresholds grew about 5x per
+// level over only five levels.
+//
+// Scoring is now per ACTION with a sqrt area term (see scoring.go), and the curve is
+// exponential over 25 levels so there is a long tail to climb.
+const (
+	// levelBaseScore is the score needed to reach level 2.
+	levelBaseScore = 50.0
+
+	// levelGrowth is the multiplier per level. 2.2 puts level 10 at roughly 27k and
+	// level 20 around 72M, which against the post-fix earn rate is hours and months
+	// respectively rather than seconds.
+	levelGrowth = 2.2
+
+	// MaxLevel is the top of the curve.
+	MaxLevel = 25
+)
+
+// LevelThresholds maps level → unlock data, generated from the exponential curve.
+//
+// Generating it rather than hand-listing 25 rows means the curve is stated once and
+// cannot drift out of step with itself, and the unlock schedule stays readable.
+var LevelThresholds = buildLevelThresholds()
+
+// LevelForScore returns the level a given score qualifies for.
+//
+// Walks the curve from the top so the highest satisfied threshold wins, which is what
+// makes the function correct for any score including those beyond the last level.
+func LevelForScore(score int) int {
+	for i := len(LevelThresholds) - 1; i >= 0; i-- {
+		if score >= LevelThresholds[i].Score {
+			return i + 1
+		}
+	}
+	return 1
+}
+
+// buildLevelThresholds computes the curve and attaches unlocks to it.
+func buildLevelThresholds() []LevelThreshold {
+	out := make([]LevelThreshold, 0, MaxLevel)
+
+	for level := 1; level <= MaxLevel; level++ {
+		score := 0
+		if level > 1 {
+			// threshold(level) = base * growth^(level-2), accumulated.
+			cumulative := 0.0
+			step := levelBaseScore
+			for l := 2; l <= level; l++ {
+				cumulative += step
+				step *= levelGrowth
+			}
+			score = int(cumulative)
+		}
+
+		t := LevelThreshold{
+			Score:        score,
+			MaxInfluence: 100,
+			InflRegen:    0.5,
+			PowerRadius:  24,
+		}
+
+		// Unlock schedule. Levels 1-5 keep the unlocks they always had so existing
+		// expectations (notably the level-4 Life power gate) are unchanged; 6+ are
+		// new headroom.
+		switch {
+		case level >= 20:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 320, 1.6, 48
+		case level >= 15:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 260, 1.4, 44
+		case level >= 10:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 220, 1.2, 40
+		case level >= 7:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 180, 1.0, 36
+		case level >= 5:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 150, 0.8, 32
+		case level >= 3:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 100, 0.8, 28
+		case level >= 2:
+			t.MaxInfluence, t.InflRegen, t.PowerRadius = 100, 0.5, 28
+		}
+
+		out = append(out, t)
+	}
+
+	return out
 }
 
 // Player holds the runtime state of a connected player.

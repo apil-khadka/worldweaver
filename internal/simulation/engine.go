@@ -156,6 +156,21 @@ func (e *Engine) tick() {
 	// Weather cycle pass — evaporation & cloud formation on active chunks.
 	updateWeatherCycle(w)
 
+	// Reaction pass — the declarative element table. Runs every few ticks and
+	// skips any cell whose element cannot react, so most of the grid costs
+	// nothing. See ADR-011.
+	simulateReactions(w)
+
+	// Cooling — relaxes reaction heat back toward ambient. Deliberately outside the
+	// chunk-sleep optimisation: a burnt-out crater is motionless, so its chunk
+	// sleeps, and cooling that honoured sleep would leave it hot forever.
+	relaxTemperatures(w)
+
+	// Ecosystem floor — reintroduces a tier of the food chain that has gone
+	// extinct. Grazer population zero is otherwise an absorbing state, so a
+	// long-lived world drifted into having no animals and could never recover.
+	recoverEcosystem(w)
+
 	// Update sleep states at end of tick.
 	w.UpdateSleepStates()
 

@@ -620,7 +620,9 @@
     }
     #world-canvas {
       display: block;
-      cursor: crosshair;
+      /* The brush ring drawn on #brush-overlay IS the cursor now. Keeping the
+         crosshair as well gave two competing aim points a few pixels apart. */
+      cursor: none;
       image-rendering: pixelated;
     }
     /* Zoom indicator badge */
@@ -645,6 +647,479 @@
     }
     #zoom-indicator.visible {
       opacity: 1;
+    }
+
+    /* ── Zoom controls ───────────────────────────────────────
+       Wheel zoom is gone, so zoom needs a visible affordance. */
+    #zoom-controls {
+      position: absolute;
+      top: 44px;
+      right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 50;
+    }
+    #zoom-controls button {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--muted);
+      background: rgba(253, 248, 240, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+      box-shadow: 0 1px 4px rgba(44, 24, 16, 0.08);
+    }
+    #zoom-controls button:hover {
+      background: #fff;
+      color: var(--ink);
+    }
+    #zoom-controls button:active {
+      transform: scale(0.92);
+    }
+
+    /* ── Shared goal banner ──────────────────────────────────
+       Top-centre so it reads as the world's objective rather than
+       another stat in the header. */
+    .goal-banner {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(360px, calc(100% - 140px));
+      padding: 9px 13px 11px;
+      background: rgba(253, 248, 240, 0.94);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 3px 14px rgba(44, 24, 16, 0.10);
+      z-index: 52;
+      pointer-events: none;
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+    .goal-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 3px;
+    }
+    .goal-eyebrow {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .goal-count {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+    .goal-count b { color: var(--accent); }
+    .goal-text {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.35;
+      margin-bottom: 7px;
+    }
+    .goal-track {
+      height: 5px;
+      background: rgba(44, 24, 16, 0.09);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .goal-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #E8A33C);
+      transition: width 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+    /* A completed goal celebrates once rather than sitting there silently. */
+    .goal-banner.goal-done {
+      border-color: #6FA85A;
+      box-shadow: 0 0 0 2px rgba(111, 168, 90, 0.22), 0 3px 14px rgba(44, 24, 16, 0.10);
+    }
+    .goal-banner.goal-done .goal-fill {
+      background: linear-gradient(90deg, #6FA85A, #8FC47A);
+    }
+    .goal-banner.goal-flash {
+      animation: goalFlash 1.1s ease;
+    }
+    @keyframes goalFlash {
+      0%, 100% { transform: translateX(-50%) scale(1); }
+      30%      { transform: translateX(-50%) scale(1.035); }
+    }
+
+    /* ── Creature legend ─────────────────────────────────────
+       Creatures are one cell each, so at fit-to-screen zoom they are
+       sub-pixel. Live counts confirm the ecosystem is running even
+       when a single sheep is too small to pick out. */
+    #creature-legend {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 10px;
+      background: rgba(253, 248, 240, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      box-shadow: 0 2px 10px rgba(44, 24, 16, 0.08);
+      font-size: 11px;
+      z-index: 50;
+    }
+    .legend-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+      padding: 0 0 4px;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: none;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .legend-toggle:hover { color: var(--ink); }
+    .legend-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #C4B8A4;
+      transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .legend-dot--on {
+      background: #6FA85A;
+      box-shadow: 0 0 0 2px rgba(111, 168, 90, 0.22);
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+    }
+    .legend-swatch {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--c);
+      border: 1px solid var(--o);
+      flex: none;
+    }
+    .legend-name {
+      min-width: 54px;
+    }
+    .legend-row b {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 10.5px;
+      color: var(--ink);
+      margin-left: auto;
+    }
+    /* Dimmed while markers are off, so the toggle state is unambiguous. */
+    #creature-legend.markers-off .legend-row { opacity: 0.45; }
+
+    @media (max-width: 640px) {
+      .goal-banner { width: calc(100% - 24px); }
+      #creature-legend { font-size: 10px; padding: 6px 8px; }
+      .legend-name { min-width: 46px; }
+    }
+
+    /* ── Element drawer ──────────────────────────────────────
+       A side panel rather than the old horizontal strip: 44 elements
+       grouped into 13 categories do not fit a row, and a player needs
+       to read what an element does before placing it.
+
+       Anchored inside #canvas-wrapper (position: relative) so it
+       overlays the world edge instead of resizing the canvas — closing
+       it returns the full viewport with no reflow. */
+    #element-drawer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 300px;
+      max-width: 82vw;
+      display: flex;
+      flex-direction: column;
+      background: rgba(253, 248, 240, 0.97);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border-left: 1px solid var(--border);
+      box-shadow: -6px 0 24px rgba(44, 24, 16, 0.10);
+      /* Above the minimap and legend, below remote cursors and toasts. */
+      z-index: 70;
+      transform: translateX(100%);
+      transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+      /* Non-interactive while closed, so it cannot swallow clicks aimed
+         at the canvas underneath it. */
+      pointer-events: none;
+    }
+    #element-drawer.open {
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #element-drawer { transition: none; }
+    }
+
+    .el-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--sp-3) var(--sp-4);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .el-drawer-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .el-drawer-close {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: none;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .el-drawer-close:hover {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .el-search {
+      margin: var(--sp-3) var(--sp-4) var(--sp-2);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .el-search:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    .el-search::placeholder { color: var(--muted); opacity: 0.7; }
+
+    /* The list scrolls; the detail pane below it does not, so a player
+       reading an element's reactions does not lose the list. */
+    .el-list {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 0 var(--sp-4) var(--sp-3);
+      min-height: 0;
+    }
+    .el-section { margin-bottom: var(--sp-3); }
+    .el-section-title {
+      position: sticky;
+      top: 0;
+      padding: var(--sp-2) 0 var(--sp-1);
+      background: rgba(253, 248, 240, 0.97);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      z-index: 1;
+    }
+    .el-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-1);
+    }
+
+    .el-swatch {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      min-width: 0;
+    }
+    .el-swatch:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      background: #fff;
+    }
+    .el-swatch.active {
+      border-color: var(--accent);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    .el-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      background: var(--c);
+      border: 1px solid rgba(44, 24, 16, 0.2);
+      flex: none;
+    }
+    .el-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .el-symbol {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 9.5px;
+      color: var(--muted);
+      opacity: 0.75;
+      flex: none;
+    }
+    .el-empty {
+      padding: var(--sp-4) 0;
+      font-size: 11.5px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ── Detail pane ─────────────────────────────────────────
+       Shows real physical values and the actual chemical equations.
+       Without this the catalogue is 44 coloured powders and there is no
+       way to discover that magnesium burns in CO2 except by accident. */
+    .el-detail {
+      flex: 0 0 auto;
+      max-height: 46%;
+      overflow-y: auto;
+      padding: var(--sp-3) var(--sp-4) var(--sp-4);
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .el-detail:empty { display: none; }
+
+    .el-detail-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding-left: 9px;
+      border-left: 3px solid var(--c);
+      margin-bottom: var(--sp-2);
+    }
+    .el-detail-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .el-detail-symbol {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      padding: 2px 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .el-detail-flavour {
+      font-size: 11.5px;
+      line-height: 1.45;
+      color: var(--muted);
+      margin-bottom: var(--sp-3);
+    }
+
+    .el-props {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px var(--sp-3);
+      margin-bottom: var(--sp-3);
+      font-size: 11px;
+    }
+    .el-props dt { color: var(--muted); }
+    .el-props dd {
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 10.5px;
+    }
+
+    .el-rx-title {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding-bottom: var(--sp-1);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: var(--sp-2);
+    }
+    .el-rx-list { list-style: none; display: flex; flex-direction: column; gap: var(--sp-2); }
+    .el-rx {
+      padding: 6px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--border-highlight);
+      border-radius: 6px;
+    }
+    /* Exothermic reactions are marked, because "releases heat" is what
+       makes a chain reaction possible and is worth spotting at a glance. */
+    .el-rx--exo { border-left-color: var(--accent); }
+    .el-rx-pair {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .el-rx-eq {
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+      word-break: break-word;
+    }
+    .el-rx-cond {
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.85;
+      margin-top: 3px;
+    }
+
+    .tool-btn--elements { font-weight: 600; }
+
+    @media (max-width: 640px) {
+      #element-drawer { width: 100%; max-width: 100%; }
+      .el-grid { grid-template-columns: 1fr 1fr 1fr; }
     }
 
     /* ── Status overlay ──────────────────────────────────── */
@@ -1193,15 +1668,23 @@
     }
 
     /* ── Game Feel: Screen Shake ─────────────────────────── */
+    /* Softened from a ±3px jolt: at the rate applications fire while painting,
+       even a short animation at that amplitude read as the canvas vibrating.
+       Combined with the repeat/cooldown gating in input.ts, this is now a single
+       subtle nudge for a deliberately huge application. */
     @keyframes shake {
-      0%   { transform: translate(2px, -1px); }
-      25%  { transform: translate(-3px, 2px); }
-      50%  { transform: translate(1px, -2px); }
-      75%  { transform: translate(-2px, 1px); }
+      0%   { transform: translate(1px, -1px); }
+      33%  { transform: translate(-1px, 1px); }
+      66%  { transform: translate(1px, 0); }
       100% { transform: translate(0, 0); }
     }
     #canvas-wrapper.shake {
-      animation: shake 0.15s ease-out;
+      animation: shake 0.12s ease-out;
+    }
+    /* A player who has asked the OS for less motion should not get a shaking
+       canvas at all. */
+    @media (prefers-reduced-motion: reduce) {
+      #canvas-wrapper.shake { animation: none; }
     }
 
     /* ── Game Feel: Power Selection Bounce ────────────────── */
@@ -1436,6 +1919,13 @@
     <button class="tool-btn" data-tool="raise" title="Raise ground (R)">⛰ Raise</button>
     <button class="tool-btn" data-tool="lower" title="Lower ground (F)">🕳 Lower</button>
 
+    <span class="tool-divider"></span>
+
+    <!-- Opens the element drawer. Separate from the Place tool because browsing
+         what an element does is a different act from placing it. -->
+    <button id="element-drawer-toggle" class="tool-btn tool-btn--elements"
+            title="Browse elements (X)">⚛ Elements</button>
+
     <div id="brush-control" title="Brush size ( [ and ] )">
       <span>Brush</span>
       <input type="range" id="brush-slider" min="1" max="32" value="8" />
@@ -1476,9 +1966,62 @@
   <div id="canvas-wrapper">
     <canvas id="world-canvas"></canvas>
     <canvas id="power-overlay"></canvas>
+    <!-- Brush ring + creature markers. Above the world, below the DOM HUD. -->
+    <canvas id="brush-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:16;"></canvas>
     <canvas id="particle-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;"></canvas>
     <div id="zoom-indicator">1×</div>
+
+    <!-- Cooperative goal. The server has always broadcast goal_update; the
+         client used to drop it on the floor, so nobody knew there was a goal. -->
+    <div id="goal-banner" class="goal-banner">
+      <div class="goal-head">
+        <span class="goal-eyebrow">Shared goal</span>
+        <span class="goal-count"><b id="goal-progress">0</b> / <span id="goal-target">0</span></span>
+      </div>
+      <div class="goal-text" id="goal-text">Waiting for the world…</div>
+      <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
+    </div>
+
+    <!-- Zoom controls replace wheel zoom -->
+    <div id="zoom-controls">
+      <button id="zoom-in-btn"  title="Zoom in (+)"  aria-label="Zoom in">+</button>
+      <button id="zoom-out-btn" title="Zoom out (−)" aria-label="Zoom out">−</button>
+    </div>
+
+    <!-- Creature legend. Live counts prove the ecosystem exists even when the
+         individual cells are too small to pick out. -->
+    <div id="creature-legend">
+      <button id="creature-toggle" class="legend-toggle" title="Toggle creature markers (C)">
+        <span class="legend-dot legend-dot--on"></span> Life
+      </button>
+      <span class="legend-row" title="Sheep — herding grazer">
+        <span class="legend-swatch" style="--c:#F6F2E6;--o:#5C5346"></span>
+        <span class="legend-name">Sheep</span><b id="legend-sheep">0</b>
+      </span>
+      <span class="legend-row" title="Grazer — eats grass">
+        <span class="legend-swatch" style="--c:#E8C77A;--o:#6B4A17"></span>
+        <span class="legend-name">Grazer</span><b id="legend-grazer">0</b>
+      </span>
+      <span class="legend-row" title="Predator — hunts grazers">
+        <span class="legend-swatch" style="--c:#C8542F;--o:#4A1B0C"></span>
+        <span class="legend-name">Predator</span><b id="legend-predator">0</b>
+      </span>
+    </div>
     <canvas id="minimap" style="position:absolute;bottom:12px;right:12px;width:150px;height:75px;background:rgba(245,237,227,0.85);border:1px solid #C9B896;border-radius:6px;image-rendering:pixelated;pointer-events:none;z-index:50;box-shadow:0 2px 8px rgba(44,24,16,0.08);"></canvas>
+    <!-- Element drawer. Anchored inside the canvas wrapper so it slides over the
+         edge of the world rather than pushing the canvas around, and so closing it
+         gives the full viewport back. -->
+    <aside id="element-drawer" aria-label="Element picker">
+      <header class="el-drawer-head">
+        <span class="el-drawer-title">Elements</span>
+        <button id="element-drawer-close" class="el-drawer-close" title="Close (Esc)" aria-label="Close">×</button>
+      </header>
+      <input type="text" id="element-search" class="el-search"
+             placeholder="Search name or symbol…" autocomplete="off" spellcheck="false" />
+      <div id="element-list" class="el-list"></div>
+      <div id="element-detail" class="el-detail"></div>
+    </aside>
+
     <div id="status-overlay">
       <div class="status-title" id="status-title">Connecting to world…</div>
       <div id="status-body"></div>

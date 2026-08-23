@@ -108,6 +108,12 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	r.Delete("/api/worlds/{id}", hub.handleDeleteWorld)
 	r.Put("/api/worlds/{id}/visibility", hub.handleSetVisibility)
 
+	// ── Elements ─────────────────────────────────────────────────────────────
+	// The element catalogue, so the client builds its palette, colour texture and
+	// element reference from the server rather than from its own duplicate copy.
+	// See ADR-011.
+	r.Get("/api/elements", handleElements)
+
 	// ── Invites ──────────────────────────────────────────────────────────────
 	// Sharing a world is a code you hand to someone, not a permission list you
 	// administer: that is what makes bringing a friend in a single step.

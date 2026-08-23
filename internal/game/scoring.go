@@ -21,25 +21,118 @@ type PlayerScore struct {
 	PlayTime             int     `json:"playTime"` // seconds connected
 	Score                int     `json:"score"`
 
+	// EarnedScore accumulates the per-action award after anti-farm damping. It is
+	// the authoritative progression number; the counters above are activity
+	// statistics that used to double as score inputs and no longer do.
+	EarnedScore float64 `json:"earnedScore"`
+
 	// Internal: time of connection for PlayTime calculation
 	connectedAt time.Time
+
+	// ── Anti-farm state ──────────────────────────────────────────────────────
+	//
+	// Previously absent entirely, which is why holding one power on one spot paid
+	// out indefinitely.
+
+	// lastX/lastY are where the previous application landed, for the repetition and
+	// movement rules.
+	lastX, lastY int
+	hasLast      bool
+
+	// actionsThisMinute counts applications inside the current window, for the rate
+	// rule. windowStart is when that window opened.
+	actionsThisMinute int
+	windowStart       time.Time
 }
 
-// ComputeScore calculates the composite score from individual metrics.
+// Anti-farm tuning.
+const (
+	// areaBonusWeight scales the sqrt(cells) term. Low enough that the flat base
+	// dominates for ordinary brush sizes.
+	areaBonusWeight = 0.55
+
+	// repeatRadius is how close an application must be to the previous one to count
+	// as painting the same spot again.
+	repeatRadius = 6
+
+	// repeatPenalty is the multiplier applied when it is. Not zero: repeating a spot
+	// is sometimes legitimate (building up a wall), it just should not be the
+	// optimal way to progress.
+	repeatPenalty = 0.1
+
+	// movementBonus rewards working across the world rather than into one hole.
+	movementBonus = 1.5
+
+	// movementDistance is how far an application must be from the last one to earn
+	// that bonus.
+	movementDistance = 40
+
+	// rateFullActions is how many actions per minute score at full value.
+	rateFullActions = 30
+	// rateHalfActions is the count after which actions score at a tenth.
+	rateHalfActions = 60
+)
+
+// antiFarmMultiplier computes the damping for one application.
 //
-// Formula:
+// Three independent rules, multiplied:
 //
-//	Score = CellsAffected*1 + CreaturesSpawned*5 + WaterCreated*2 + max(0, StabilityContribution)*10
-func (ps *PlayerScore) ComputeScore() int {
-	stabilityBonus := float32(0)
-	if ps.StabilityContribution > 0 {
-		stabilityBonus = ps.StabilityContribution * 10
+//   - Repetition: an application within repeatRadius of the previous one scores a
+//     tenth. This is what stops holding the button on one spot from paying out.
+//   - Rate: the first 30 actions in a minute score fully, the next 30 at half, the
+//     rest at a tenth. This bounds the ceiling regardless of technique.
+//   - Movement: an application more than movementDistance from the last scores 1.5x,
+//     rewarding working across the world.
+func (ps *PlayerScore) antiFarmMultiplier(x, y, cellsAffected int, now time.Time) float64 {
+	multiplier := 1.0
+
+	// ── Rate rule ────────────────────────────────────────────────────────────
+	if ps.windowStart.IsZero() || now.Sub(ps.windowStart) >= time.Minute {
+		ps.windowStart = now
+		ps.actionsThisMinute = 0
 	}
-	score := float32(ps.CellsAffected)*1 +
-		float32(ps.CreaturesSpawned)*5 +
-		float32(ps.WaterCreated)*2 +
-		stabilityBonus
-	return int(math.Round(float64(score)))
+	ps.actionsThisMinute++
+	switch {
+	case ps.actionsThisMinute > rateHalfActions:
+		multiplier *= 0.1
+	case ps.actionsThisMinute > rateFullActions:
+		multiplier *= 0.5
+	}
+
+	// ── Repetition and movement rules ────────────────────────────────────────
+	if ps.hasLast {
+		dx := x - ps.lastX
+		dy := y - ps.lastY
+		distSq := dx*dx + dy*dy
+
+		if distSq <= repeatRadius*repeatRadius {
+			multiplier *= repeatPenalty
+		} else if distSq >= movementDistance*movementDistance {
+			multiplier *= movementBonus
+		}
+	}
+	ps.lastX, ps.lastY = x, y
+	ps.hasLast = true
+
+	return multiplier
+}
+
+// ComputeScore calculates the composite score.
+//
+// Score is now EarnedScore — the accumulated per-action award after anti-farm
+// damping — plus a stability bonus for keeping the world healthy.
+//
+// The old formula was CellsAffected*1 + CreaturesSpawned*5 + WaterCreated*2 +
+// stability*10, where the first three terms were all per-cell counters. That made
+// score a function of total brush area swept, which is why max level was reachable
+// in about two seconds. Those counters are still tracked and reported, but as
+// activity statistics rather than score inputs.
+func (ps *PlayerScore) ComputeScore() int {
+	stabilityBonus := float64(0)
+	if ps.StabilityContribution > 0 {
+		stabilityBonus = float64(ps.StabilityContribution) * 10
+	}
+	return int(math.Round(ps.EarnedScore + stabilityBonus))
 }
 
 // Scoreboard manages per-world, per-player scores thread-safely.
@@ -78,16 +171,74 @@ func (sb *Scoreboard) PlayerDisconnected(worldName string, playerID uint32) {
 }
 
 // RecordPowerAction updates a player's score based on a power usage event.
-// The caller specifies the power type, how many cells were affected, and
-// the influence cost that was spent.
-func (sb *Scoreboard) RecordPowerAction(worldName string, playerID uint32, power uint8, cellsAffected int, influenceCost float32) {
+//
+// # Scoring is per ACTION, not per cell
+//
+// This function used to add cellsAffected to every counter, so score grew as the
+// SQUARE of the brush radius: a radius-8 brush covers 197 cells, making one Rain
+// application worth 591 points and one second of holding the button worth 4,728
+// against a max-level threshold of 10,000. Max level arrived in 2.1 seconds, and in
+// 0.23 seconds at the radius-24 cap. Brush size, not skill or time, was the entire
+// progression system.
+//
+// Reward is now a flat per-action base plus a sqrt(cells) area term, so a wider brush
+// is a convenience rather than a multiplier — doubling the radius roughly doubles the
+// area term instead of quadrupling the score.
+//
+// Three anti-farm rules then apply, because the scoreboard previously had none at
+// all: a player could hold one power on one spot forever and score every tick even
+// though nothing about the world was changing.
+func (sb *Scoreboard) RecordPowerAction(
+	worldName string, playerID uint32, power uint8,
+	cellsAffected int, influenceCost float32,
+) {
+	sb.recordPowerActionAt(worldName, playerID, power, cellsAffected, influenceCost, 0, 0, time.Now())
+}
+
+// RecordPowerActionAt is RecordPowerAction with the application's world position, so
+// the repetition and movement rules can be applied. Prefer this from the hub.
+func (sb *Scoreboard) RecordPowerActionAt(
+	worldName string, playerID uint32, power uint8,
+	cellsAffected int, influenceCost float32, x, y int,
+) {
+	sb.recordPowerActionAt(worldName, playerID, power, cellsAffected, influenceCost, x, y, time.Now())
+}
+
+func (sb *Scoreboard) recordPowerActionAt(
+	worldName string, playerID uint32, power uint8,
+	cellsAffected int, influenceCost float32, x, y int, now time.Time,
+) {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
 	ps := sb.getOrCreate(worldName, playerID)
 
+	// Influence and raw cell count are still tracked verbatim: they are honest
+	// activity statistics and are shown in the HUD. They just no longer drive score.
 	ps.InfluenceSpent += influenceCost
 	ps.CellsAffected += cellsAffected
 
+	multiplier := ps.antiFarmMultiplier(x, y, cellsAffected, now)
+
+	// Base reward per action, before the area term. Powers that do more interesting
+	// work to the world are worth more.
+	base := 4.0
+	switch power {
+	case PowerGrowth:
+		base = 7.0
+	case PowerLife:
+		base = 10.0
+	case PowerRain:
+		base = 5.0
+	}
+
+	// Sub-linear area term: sqrt keeps a big brush worthwhile without making it
+	// strictly dominant.
+	area := math.Sqrt(float64(cellsAffected))
+
+	ps.EarnedScore += (base + area*areaBonusWeight) * multiplier
+
+	// Per-power activity counters, kept for the leaderboard's flavour stats. These
+	// are counts of what the player did, not score inputs.
 	switch power {
 	case PowerRain:
 		ps.WaterCreated += cellsAffected
@@ -176,6 +327,21 @@ func (sb *Scoreboard) GetPlayerScore(worldName string, playerID uint32) *PlayerS
 
 // getOrCreate returns the PlayerScore entry, creating it if it doesn't exist.
 // Caller must hold sb.mu.
+// ScoreOf returns a player's current computed score, or zero if unknown.
+//
+// A small convenience over GetPlayerScore for callers and tests that only need the
+// number, so they do not have to nil-check a struct pointer to read one field.
+func (sb *Scoreboard) ScoreOf(worldName string, playerID uint32) int {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+	if worldScores, ok := sb.worlds[worldName]; ok {
+		if ps, ok := worldScores[playerID]; ok {
+			return ps.ComputeScore()
+		}
+	}
+	return 0
+}
+
 func (sb *Scoreboard) getOrCreate(worldName string, playerID uint32) *PlayerScore {
 	if _, ok := sb.worlds[worldName]; !ok {
 		sb.worlds[worldName] = make(map[uint32]*PlayerScore)

@@ -144,7 +144,13 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 	if req.Tool != game.ToolForce {
 		cost = game.ToolCostPerCell[req.Tool] * float32(cellsAffected)
 	}
-	h.Scoreboard.RecordPowerAction(h.worldIDOf(c), c.Player.ID, req.Power, cellsAffected, cost)
+	// Position is passed so the scoreboard's repetition and movement rules can see
+	// whether the player is painting the same spot or working across the world.
+	// Without it every application looks like it happened at the origin, so the
+	// repetition penalty would apply to everything.
+	h.Scoreboard.RecordPowerActionAt(
+		h.worldIDOf(c), c.Player.ID, req.Power, cellsAffected, cost, req.X, req.Y,
+	)
 
 	// Record the contribution and tell the players involved when they earned
 	// collaboration credit, so working alongside someone is something they can
