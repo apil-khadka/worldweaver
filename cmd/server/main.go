@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -88,6 +89,32 @@ func main() {
 	auth := game.NewAuthManager()
 	worldMgr := game.NewWorldManager(*seed, *worldW, *worldH)
 	hub := network.NewHub(w, eng, m, sb, "genesis", auth, worldMgr)
+
+	// Same-origin WebSocket connections are always allowed. Set
+	// WW_ALLOWED_ORIGINS (comma-separated hosts, wildcards permitted) when the
+	// frontend is served from a different host than the API.
+	if origins := strings.TrimSpace(os.Getenv("WW_ALLOWED_ORIGINS")); origins != "" {
+		for _, o := range strings.Split(origins, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				hub.AllowedOrigins = append(hub.AllowedOrigins, o)
+			}
+		}
+		log.Printf("extra allowed WebSocket origins: %v", hub.AllowedOrigins)
+	}
+
+	// Expired sessions, challenges and invite codes are held in memory and were
+	// never reclaimed, so both stores grew for the lifetime of the process and a
+	// leaked token stayed usable until restart.
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if n := auth.PruneExpired(); n > 0 {
+				log.Printf("pruned %d expired session(s)", n)
+			}
+			hub.Access.PruneInvites()
+		}
+	}()
 
 	// Static file system — serves the built frontend from web/dist/
 	staticFS := http.Dir("web/dist")

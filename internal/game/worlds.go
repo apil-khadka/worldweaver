@@ -99,21 +99,61 @@ const (
 	GoalGrowPlants
 	GoalExtinguishFires
 	GoalCreateLake
+	GoalGrowGrass
+	GoalRaiseHerd
+	GoalEstablishPredators
+	GoalPlantForest
+	GoalClearVoid
+	GoalClearRadiation
+	GoalCoolWorld
+)
+
+// GoalDirection says whether a goal is met by reaching a figure or by getting
+// below one. Completion used to be a switch with a case per goal type, which
+// meant every new objective needed its comparison written out again.
+type GoalDirection int
+
+const (
+	// AtLeast completes when progress reaches or exceeds the target.
+	AtLeast GoalDirection = iota
+	// AtMost completes when progress falls to or below the target.
+	AtMost
 )
 
 // GoalDefinition describes a cooperative goal template.
 type GoalDefinition struct {
-	Type   GoalType
-	Text   string
-	Target int
+	Type      GoalType
+	Text      string
+	Target    int
+	Direction GoalDirection
+}
+
+// Satisfied reports whether a measurement meets this goal.
+func (d GoalDefinition) Satisfied(progress int) bool {
+	if d.Direction == AtMost {
+		return progress <= d.Target
+	}
+	return progress >= d.Target
 }
 
 // GoalRotation is the set of goals that rotate every 5 minutes.
+//
+// Objectives that ask the players to clean something up are only offered when
+// there is something to clean up: the rotation skips any goal that is already
+// satisfied when it comes round, so "extinguish all fires" is not handed out and
+// immediately completed on a world that is not burning.
 var GoalRotation = []GoalDefinition{
-	{Type: GoalStability, Text: "Raise stability above 80%", Target: 80},
-	{Type: GoalGrowPlants, Text: "Grow 500 plants", Target: 500},
-	{Type: GoalExtinguishFires, Text: "Extinguish all fires", Target: 0},
-	{Type: GoalCreateLake, Text: "Create a lake (1000+ water cells connected)", Target: 1000},
+	{Type: GoalStability, Text: "Raise world stability above 80%", Target: 80, Direction: AtLeast},
+	{Type: GoalGrowGrass, Text: "Cover the land with 3000 grass", Target: 3000, Direction: AtLeast},
+	{Type: GoalRaiseHerd, Text: "Raise a herd of 60 grazing animals", Target: 60, Direction: AtLeast},
+	{Type: GoalPlantForest, Text: "Grow a forest of 1200 trees", Target: 1200, Direction: AtLeast},
+	{Type: GoalCreateLake, Text: "Fill a lake of 1000 connected water", Target: 1000, Direction: AtLeast},
+	{Type: GoalEstablishPredators, Text: "Establish 15 predators", Target: 15, Direction: AtLeast},
+	{Type: GoalExtinguishFires, Text: "Put out every fire", Target: 0, Direction: AtMost},
+	{Type: GoalClearVoid, Text: "Seal every void", Target: 0, Direction: AtMost},
+	{Type: GoalClearRadiation, Text: "Clear all radiation", Target: 0, Direction: AtMost},
+	{Type: GoalCoolWorld, Text: "Cool the world: fewer than 200 lava cells", Target: 200, Direction: AtMost},
+	{Type: GoalGrowPlants, Text: "Grow 500 plants", Target: 500, Direction: AtLeast},
 }
 
 // GoalRotationInterval is how often goals rotate.
@@ -242,8 +282,13 @@ func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, crea
 	return &instance.Info, nil
 }
 
-// DeleteWorld removes a world by ID. Only the creator (or system) can delete.
-func (wm *WorldManager) DeleteWorld(id string, requesterName string) error {
+// DeleteWorldByOwner removes a world by ID.
+//
+// Authorization is NOT performed here: the caller must already have established
+// ownership through the AccessRegistry, which records the owner's public key.
+// The previous DeleteWorld compared the requester's display name against
+// CreatorName, which anyone could satisfy by picking that name at login.
+func (wm *WorldManager) DeleteWorldByOwner(id string) error {
 	if id == "genesis" {
 		return fmt.Errorf("cannot delete the default world")
 	}
@@ -251,12 +296,8 @@ func (wm *WorldManager) DeleteWorld(id string, requesterName string) error {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	w, ok := wm.worlds[id]
-	if !ok {
+	if _, ok := wm.worlds[id]; !ok {
 		return fmt.Errorf("world not found")
-	}
-	if w.Info.CreatorName != requesterName {
-		return fmt.Errorf("only the creator can delete this world")
 	}
 
 	delete(wm.worlds, id)
@@ -351,31 +392,40 @@ func (wm *WorldManager) UpdateGoalProgress(id string, progress int) bool {
 	}
 	w.Goal.Progress = progress
 
-	// Check completion based on goal type
-	switch w.Goal.Definition.Type {
-	case GoalStability:
-		if progress >= w.Goal.Definition.Target {
-			w.Goal.Completed = true
-			return true
-		}
-	case GoalGrowPlants:
-		if progress >= w.Goal.Definition.Target {
-			w.Goal.Completed = true
-			return true
-		}
-	case GoalExtinguishFires:
-		// Target is 0 fires — completed when progress (fire count) == 0
-		if progress == 0 {
-			w.Goal.Completed = true
-			return true
-		}
-	case GoalCreateLake:
-		if progress >= w.Goal.Definition.Target {
-			w.Goal.Completed = true
-			return true
-		}
+	if w.Goal.Definition.Satisfied(progress) {
+		w.Goal.Completed = true
+		return true
 	}
 	return false
+}
+
+// SkipCurrentGoal advances to the next objective without awarding a bonus.
+//
+// Used when a freshly rotated goal turns out to be satisfied already, which
+// happens with clean-up objectives on a world that has nothing to clean up.
+func (wm *WorldManager) SkipCurrentGoal(id string) {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	w, ok := wm.worlds[id]
+	if !ok {
+		return
+	}
+	w.Goal.Index = (w.Goal.Index + 1) % len(GoalRotation)
+	w.Goal.Definition = GoalRotation[w.Goal.Index]
+	w.Goal.Progress = 0
+	w.Goal.Completed = false
+	w.Goal.StartedAt = time.Now()
+}
+
+// GoalAge reports how long the current goal has been active.
+func (wm *WorldManager) GoalAge(id string) time.Duration {
+	wm.mu.RLock()
+	defer wm.mu.RUnlock()
+	w, ok := wm.worlds[id]
+	if !ok {
+		return 0
+	}
+	return time.Since(w.Goal.StartedAt)
 }
 
 // RotateGoalIfDue checks if the current goal has expired and rotates.

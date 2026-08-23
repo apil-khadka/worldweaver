@@ -115,7 +115,11 @@ func e2eConnect(t *testing.T, addr string) *e2eClient {
 	dialCtx, dialCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer dialCancel()
 
-	conn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws", nil)
+	// Each test client is its own identity, so concurrent clients get distinct
+	// player IDs exactly as separate browsers would.
+	token := httpLogin(t, addr, "e2e")
+
+	conn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws?token="+token, nil)
 	if err != nil {
 		cancel()
 		t.Fatalf("WebSocket dial failed: %v", err)
@@ -598,6 +602,13 @@ func TestE2EConcurrentLoad(t *testing.T) {
 	var connectWg sync.WaitGroup
 	var connectErrors atomic.Int32
 
+	// Tokens are minted up front, on this goroutine: httpLogin calls t.Fatalf,
+	// which is only valid from the goroutine running the test.
+	tokens := make([]string, numClients)
+	for i := range tokens {
+		tokens[i] = httpLogin(t, addr, fmt.Sprintf("load-%d", i))
+	}
+
 	for i := range numClients {
 		connectWg.Add(1)
 		go func(idx int) {
@@ -606,7 +617,7 @@ func TestE2EConcurrentLoad(t *testing.T) {
 			dialCtx, dialCancel := context.WithTimeout(ctx, 5*time.Second)
 			defer dialCancel()
 
-			conn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws", nil)
+			conn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws?token="+tokens[idx], nil)
 			if err != nil {
 				connectErrors.Add(1)
 				cancel()
@@ -712,7 +723,7 @@ func TestE2EConcurrentLoad(t *testing.T) {
 	// Verify server still accepts new connections
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer dialCancel()
-	newConn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws", nil)
+	newConn, _, err := websocket.Dial(dialCtx, "ws://"+addr+"/ws?token="+httpLogin(t, addr, "after-load"), nil)
 	if err != nil {
 		t.Fatalf("Server not accepting new connections after load: %v", err)
 	}

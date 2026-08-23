@@ -72,7 +72,7 @@ func TestFullStackIntegration(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/ws", nil)
+		conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/ws?token="+httpLogin(t, addr, "welcome"), nil)
 		if err != nil {
 			t.Fatalf("WebSocket dial failed: %v", err)
 		}
@@ -136,7 +136,7 @@ func TestFullStackIntegration(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/ws", nil)
+		conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/ws?token="+httpLogin(t, addr, "power"), nil)
 		if err != nil {
 			t.Fatalf("WebSocket dial failed: %v", err)
 		}

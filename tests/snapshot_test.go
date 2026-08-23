@@ -54,7 +54,8 @@ func TestInitialSnapshotIsNotEmpty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, "ws://"+addr+"/ws?world=genesis", nil)
+	conn, _, err := websocket.Dial(ctx,
+		"ws://"+addr+"/ws?world=genesis&token="+httpLogin(t, addr, "snap"), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

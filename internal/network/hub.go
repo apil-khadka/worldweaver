@@ -31,6 +31,15 @@ type Hub struct {
 	auth        *game.AuthManager
 	worldMgr    *game.WorldManager
 
+	// Access holds world ownership, visibility and invites. Exported so tests and
+	// startup code can seed it; every authorization decision goes through it.
+	Access *game.AccessRegistry
+
+	// AllowedOrigins lists extra origin patterns accepted on the WebSocket
+	// upgrade. Same-origin is always allowed; anything here is in addition to it.
+	// Empty means same-origin only, which is the safe default.
+	AllowedOrigins []string
+
 	// Social: per-player chat rate limiting (max 5 msgs per 10s)
 	chatLimits   map[uint32]*chatRateEntry
 	chatLimitsMu sync.Mutex
@@ -65,6 +74,7 @@ func NewHub(w *world.World, eng *simulation.Engine, m *metrics.Metrics, sb *game
 		WorldName:    worldName,
 		auth:         auth,
 		worldMgr:     worldMgr,
+		Access:       game.NewAccessRegistry(),
 		chatLimits:   make(map[uint32]*chatRateEntry),
 		recentPowers: make([]powerEvent, 0, 64),
 	}
@@ -430,16 +440,20 @@ func (h *Hub) TickGoals(stability float32) {
 		return
 	}
 
-	var progress int
-	switch gs.Definition.Type {
-	case game.GoalStability:
-		progress = int(stability * 100)
-	case game.GoalGrowPlants:
-		progress = h.countMaterial(5) // MatPlant == 5
-	case game.GoalExtinguishFires:
-		progress = h.countMaterial(6) // MatFire == 6
-	case game.GoalCreateLake:
-		progress = h.largestWaterBlob()
+	progress := h.measureGoal(gs.Definition.Type, stability)
+
+	// A clean-up objective handed out on a world with nothing to clean up is
+	// satisfied the moment it starts. Rather than award a bonus for no work, skip
+	// to the next objective — but only in the first few seconds, so genuinely
+	// finishing a goal quickly still counts.
+	if gs.Definition.Satisfied(progress) &&
+		gs.Definition.Direction == game.AtMost &&
+		h.worldMgr.GoalAge(worldID) < 3*time.Second {
+		h.worldMgr.SkipCurrentGoal(worldID)
+		if next := h.worldMgr.GetGoalState(worldID); next != nil {
+			h.BroadcastGoalUpdate(next.Definition.Text, 0, next.Definition.Target, false)
+		}
+		return
 	}
 
 	justCompleted := h.worldMgr.UpdateGoalProgress(worldID, progress)
@@ -449,6 +463,33 @@ func (h *Hub) TickGoals(stability float32) {
 	if justCompleted {
 		h.awardGoalBonus()
 	}
+}
+
+// measureGoal reads the world figure that a goal is scored against.
+func (h *Hub) measureGoal(t game.GoalType, stability float32) int {
+	switch t {
+	case game.GoalStability:
+		return int(stability * 100)
+	case game.GoalGrowPlants, game.GoalPlantForest:
+		return h.countMaterial(world.MatPlant)
+	case game.GoalGrowGrass:
+		return h.countMaterial(world.MatGrass)
+	case game.GoalRaiseHerd:
+		return h.countMaterial(world.MatHerbivore) + h.countMaterial(world.MatSheep)
+	case game.GoalEstablishPredators:
+		return h.countMaterial(world.MatPredator)
+	case game.GoalExtinguishFires:
+		return h.countMaterial(world.MatFire)
+	case game.GoalClearVoid:
+		return h.countMaterial(world.MatVoid)
+	case game.GoalClearRadiation:
+		return h.countMaterial(world.MatRadiation)
+	case game.GoalCoolWorld:
+		return h.countMaterial(world.MatLava)
+	case game.GoalCreateLake:
+		return h.largestWaterBlob()
+	}
+	return 0
 }
 
 // countMaterial counts cells of a given material type in the world.

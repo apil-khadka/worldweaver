@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
@@ -88,7 +89,11 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	})
 
 	// ── Auth ─────────────────────────────────────────────────────────────────
+	// Two-step keypair handshake: request a nonce, return a signature over it.
+	r.Post("/api/challenge", hub.handleChallenge)
 	r.Post("/api/login", hub.handleLogin)
+	r.Post("/api/logout", hub.handleLogout)
+	r.Post("/api/rename", hub.handleRename)
 	r.Get("/api/session", hub.handleSession)
 
 	// ── Worlds ───────────────────────────────────────────────────────────────
@@ -101,6 +106,15 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	r.Get("/api/worlds", hub.handleListWorlds)
 	r.Post("/api/worlds", hub.handleCreateWorld)
 	r.Delete("/api/worlds/{id}", hub.handleDeleteWorld)
+	r.Put("/api/worlds/{id}/visibility", hub.handleSetVisibility)
+
+	// ── Invites ──────────────────────────────────────────────────────────────
+	// Sharing a world is a code you hand to someone, not a permission list you
+	// administer: that is what makes bringing a friend in a single step.
+	r.Post("/api/invites", hub.handleCreateInvite)
+	r.Post("/api/invites/redeem", hub.handleRedeemInvite)
+	r.Get("/api/worlds/{id}/invites", hub.handleListInvites)
+	r.Delete("/api/invites/{code}", hub.handleRevokeInvite)
 
 	// WebSocket endpoint
 	r.Get("/ws", hub.handleWebSocket)
@@ -126,28 +140,127 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	return r
 }
 
-// ── Auth Handler ─────────────────────────────────────────────────────────────
+// ── Auth Handlers ────────────────────────────────────────────────────────────
 
+// writeJSON sends a JSON body with the given status.
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(body)
+}
+
+// writeError sends a JSON error body.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// bearerToken extracts the session token from a request.
+//
+// The header is the only supported location. An earlier version also accepted
+// ?token=, which wrote credentials into access logs and browser history.
+func bearerToken(r *http.Request) string {
+	tok := r.Header.Get("Authorization")
+	return strings.TrimPrefix(tok, "Bearer ")
+}
+
+// requireSession resolves the caller's session, or writes 401 and returns nil.
+func (h *Hub) requireSession(w http.ResponseWriter, r *http.Request) *game.AuthSession {
+	sess := h.auth.Validate(bearerToken(r))
+	if sess == nil {
+		writeError(w, http.StatusUnauthorized, "sign in first")
+		return nil
+	}
+	return sess
+}
+
+// handleChallenge issues a nonce for a public key to sign.
+//
+// This is the first half of the handshake that replaced nickname-only login.
+// Requesting a challenge proves nothing and grants nothing, so it needs no auth.
+func (h *Hub) handleChallenge(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PublicKey string `json:"publicKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	_, keyID, err := game.DecodePublicKey(req.PublicKey)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	nonce, expires, err := h.auth.NewChallenge(keyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not issue a challenge")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"challenge": nonce,
+		"expiresAt": expires.UTC(),
+	})
+}
+
+// handleLogin completes the handshake: a signature over the outstanding
+// challenge proves possession of the private key.
 func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PublicKey string `json:"publicKey"`
+		Signature string `json:"signature"`
+		Nickname  string `json:"nickname"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	sess, err := h.auth.VerifyAndLogin(req.PublicKey, req.Signature, req.Nickname)
+	if err != nil {
+		// Deliberately uniform: distinguishing "no such challenge" from "bad
+		// signature" would tell a prober which keys have login attempts pending.
+		log.Printf("login rejected: %v", err)
+		writeError(w, http.StatusUnauthorized, "could not verify that key")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":    sess.Token,
+		"playerID": sess.PlayerID,
+		"nickname": sess.Nickname,
+		"keyId":    sess.KeyID,
+	})
+}
+
+// handleLogout ends a session. Previously there was no route for this at all, so
+// a token stayed valid until the process exited.
+func (h *Hub) handleLogout(w http.ResponseWriter, r *http.Request) {
+	h.auth.Logout(bearerToken(r))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "signed out"})
+}
+
+// handleRename changes the caller's display name without touching their identity.
+func (h *Hub) handleRename(w http.ResponseWriter, r *http.Request) {
+	if h.requireSession(w, r) == nil {
+		return
+	}
 	var req struct {
 		Nickname string `json:"nickname"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if req.Nickname == "" {
-		req.Nickname = "Anonymous"
-	}
-	if len(req.Nickname) > 20 {
-		req.Nickname = req.Nickname[:20]
-	}
 
-	sess := h.auth.Login(req.Nickname)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"token":    sess.Token,
+	sess, err := h.auth.Rename(bearerToken(r), req.Nickname)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
 		"playerID": sess.PlayerID,
 		"nickname": sess.Nickname,
 	})
@@ -179,29 +292,37 @@ func staticCacheHeaders(next http.Handler) http.Handler {
 // client uses this endpoint on load to decide between resuming silently and
 // re-authenticating, instead of always forcing the player back to the lobby.
 func (h *Hub) handleSession(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-
-	sess := h.auth.Validate(token)
+	sess := h.requireSession(w, r)
 	if sess == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired token"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"playerID": sess.PlayerID,
 		"nickname": sess.Nickname,
+		"keyId":    sess.KeyID,
 	})
 }
 
 // ── World Handlers ───────────────────────────────────────────────────────────
 
+// worldListing is a world as the lobby sees it: the metadata plus the caller's
+// relationship to it, so the client does not have to guess which controls to show.
+type worldListing struct {
+	game.WorldInfo
+	Visibility game.Visibility `json:"visibility"`
+	Owned      bool            `json:"owned"`
+}
+
+// handleListWorlds returns the worlds this caller is allowed to see.
+//
+// Listing is filtered per caller: unlisted and private worlds are omitted unless
+// the caller owns them or has been invited. Previously every world was returned
+// to everybody, so a "private" world was private in name only — its ID was on
+// the front page for anyone to connect to.
+//
+// The endpoint stays readable without a session so the landing page can show the
+// public worlds to a visitor who has not signed in yet.
 func (h *Hub) handleListWorlds(w http.ResponseWriter, r *http.Request) {
 	// Update player counts from live hub
 	h.mu.RLock()
@@ -209,18 +330,39 @@ func (h *Hub) handleListWorlds(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 	h.worldMgr.SetPlayerCount("genesis", count)
 
-	worlds := h.worldMgr.ListWorlds()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(worlds)
+	keyID := ""
+	if sess := h.auth.Validate(bearerToken(r)); sess != nil {
+		keyID = sess.KeyID
+	}
+
+	out := make([]worldListing, 0)
+	for _, info := range h.worldMgr.ListWorlds() {
+		if !h.Access.Visible(info.ID, keyID) {
+			continue
+		}
+		_, vis, ok := h.Access.Get(info.ID)
+		if !ok {
+			vis = game.VisibilityPublic
+		}
+		out = append(out, worldListing{
+			WorldInfo:  info,
+			Visibility: vis,
+			Owned:      keyID != "" && h.Access.IsOwner(info.ID, keyID),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
+// handleCreateWorld creates a world owned by the caller's key.
+//
+// A verified session is now required. Previously a nil session was tolerated and
+// the world was recorded as owned by the literal name "anonymous", which meant
+// any other anonymous caller satisfied the ownership check and could delete it.
 func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
-	// Auth check (optional — anonymous can create for hackathon)
-	token := r.Header.Get("Authorization")
-	sess := h.auth.Validate(token)
-	creatorName := "anonymous"
-	if sess != nil {
-		creatorName = sess.Nickname
+	sess := h.requireSession(w, r)
+	if sess == nil {
+		return
 	}
 
 	var req struct {
@@ -228,55 +370,196 @@ func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		Seed       int64  `json:"seed"`
 		MaxPlayers int    `json:"maxPlayers"`
 		Size       string `json:"size"`
+		Visibility string `json:"visibility"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if req.Name == "" {
-		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
+	if game.SanitiseNickname(req.Name) == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
 	if req.MaxPlayers < 1 || req.MaxPlayers > game.MaxPlayers {
 		req.MaxPlayers = game.MaxPlayers
 	}
 
-	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.MaxPlayers, creatorName, req.Size)
+	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.MaxPlayers, sess.Nickname, req.Size)
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(info)
+	// Ownership is recorded against the key, not the display name.
+	vis := game.ParseVisibility(req.Visibility)
+	h.Access.Register(info.ID, sess.KeyID, vis)
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"world":      info,
+		"visibility": vis,
+		"owned":      true,
+	})
 }
 
+// handleDeleteWorld removes a world the caller owns.
 func (h *Hub) handleDeleteWorld(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
+	if sess == nil {
+		return
+	}
 	id := chi.URLParam(r, "id")
 
-	// Auth check — required for deletion
-	token := r.Header.Get("Authorization")
-	sess := h.auth.Validate(token)
+	if id == "genesis" {
+		writeError(w, http.StatusForbidden, "the founding world cannot be deleted")
+		return
+	}
+	if !h.Access.IsOwner(id, sess.KeyID) {
+		// Same response whether the world is missing or owned by someone else, so
+		// this cannot be used to discover which private world IDs exist.
+		writeError(w, http.StatusForbidden, "only the owner can delete this world")
+		return
+	}
+
+	if err := h.worldMgr.DeleteWorldByOwner(id); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.Access.Forget(id)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ── Invites and membership ───────────────────────────────────────────────────
+
+// handleCreateInvite issues an invite code for a world the caller owns.
+func (h *Hub) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
 	if sess == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
 
-	if err := h.worldMgr.DeleteWorld(id, sess.Nickname); err != nil {
-		status := http.StatusBadRequest
-		if err.Error() == "only the creator can delete this world" {
-			status = http.StatusForbidden
+	var req struct {
+		WorldID   string `json:"worldId"`
+		MaxUses   int    `json:"maxUses"`
+		ExpiresIn string `json:"expiresIn"` // Go duration string, e.g. "24h"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	var ttl time.Duration
+	if req.ExpiresIn != "" {
+		parsed, err := time.ParseDuration(req.ExpiresIn)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "expiresIn must be a duration such as 24h")
+			return
 		}
-		http.Error(w, `{"error":"`+err.Error()+`"}`, status)
+		ttl = parsed
+	}
+
+	inv, err := h.Access.CreateInvite(req.WorldID, sess.KeyID, req.MaxUses, ttl)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, inv)
+}
+
+// handleRedeemInvite exchanges a code for membership of the world behind it.
+func (h *Hub) handleRedeemInvite(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
+	if sess == nil {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	worldID, err := h.Access.RedeemInvite(req.Code, sess.KeyID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	info := h.worldMgr.GetWorld(worldID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"worldId": worldID,
+		"world":   info,
+	})
+}
+
+// handleListInvites returns the live codes for a world the caller owns.
+func (h *Hub) handleListInvites(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
+	if sess == nil {
+		return
+	}
+
+	invites, err := h.Access.ListInvites(chi.URLParam(r, "id"), sess.KeyID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, invites)
+}
+
+// handleRevokeInvite deletes a code.
+func (h *Hub) handleRevokeInvite(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
+	if sess == nil {
+		return
+	}
+	if err := h.Access.RevokeInvite(chi.URLParam(r, "code"), sess.KeyID); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+// handleSetVisibility changes who can find and join a world.
+func (h *Hub) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
+	sess := h.requireSession(w, r)
+	if sess == nil {
+		return
+	}
+
+	var req struct {
+		Visibility string `json:"visibility"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	vis := game.ParseVisibility(req.Visibility)
+	if err := h.Access.SetVisibility(chi.URLParam(r, "id"), sess.KeyID, vis); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"visibility": vis})
 }
 
 // ── WebSocket Handler ────────────────────────────────────────────────────────
+
+// acceptOptions builds the upgrade options, enforcing an origin check.
+//
+// The library rejects a cross-origin handshake by default, comparing Origin
+// against the request Host. The previous code set InsecureSkipVerify, which
+// disabled that check entirely and let any page on the internet open an
+// authenticated socket using the visitor's session — a cross-site WebSocket
+// hijack. Additional origins for split frontend/backend deployments come from
+// Hub.AllowedOrigins instead.
+func (h *Hub) acceptOptions() *websocket.AcceptOptions {
+	return &websocket.AcceptOptions{
+		OriginPatterns: h.AllowedOrigins,
+	}
+}
 
 // handleWebSocket upgrades an HTTP connection to WebSocket and registers
 // the resulting client with the hub.
@@ -291,11 +574,22 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract token and world from query params
+	// The token travels in the query string here and only here. Browsers cannot
+	// set headers on a WebSocket handshake, so there is nowhere else to put it.
 	token := r.URL.Query().Get("token")
 	worldID := r.URL.Query().Get("world")
 	if worldID == "" {
 		worldID = "genesis"
+	}
+
+	// A verified session is required to connect. Previously an absent or invalid
+	// token was ignored and the connection proceeded as an anonymous player, which
+	// made every access check below trivially bypassable: no token, no key, no
+	// membership test to fail.
+	sess := h.auth.Validate(token)
+	if sess == nil {
+		http.Error(w, `{"error":"sign in first"}`, http.StatusUnauthorized)
+		return
 	}
 
 	// Validate world exists
@@ -304,12 +598,18 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Private worlds admit their owner and invited members only. Refused before
+	// the upgrade so a rejected player gets a real status code rather than a
+	// socket that opens and immediately closes.
+	if !h.Access.CanJoin(worldID, sess.KeyID) {
+		http.Error(w, `{"error":"you need an invite to enter this world"}`, http.StatusForbidden)
+		return
+	}
+
 	// Check player cap — reject if world is full
 	if h.worldMgr.IsFull(worldID) {
 		maxP := h.worldMgr.GetMaxPlayers(worldID)
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-			InsecureSkipVerify: true,
-		})
+		conn, err := websocket.Accept(w, r, h.acceptOptions())
 		if err != nil {
 			return
 		}
@@ -319,32 +619,13 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve player identity from token
-	var playerNickname string
-	var playerID uint32
-	if token != "" {
-		sess := h.auth.Validate(token)
-		if sess != nil {
-			playerNickname = sess.Nickname
-			playerID = sess.PlayerID
-		}
-	}
-
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
-	})
+	conn, err := websocket.Accept(w, r, h.acceptOptions())
 	if err != nil {
 		log.Printf("websocket accept error: %v", err)
 		return
 	}
 
-	var c *Client
-	if playerID > 0 {
-		c = newClientWithIdentity(h, conn, playerID, playerNickname, worldID)
-	} else {
-		c = newClient(h, conn)
-		c.WorldID = worldID
-	}
+	c := newClientWithIdentity(h, conn, sess.PlayerID, sess.Nickname, worldID)
 
 	h.register(c)
 
