@@ -193,10 +193,15 @@ async function main() {
     }
   });
 
-  // Sync renderer viewport to canvas data attributes for cursor positioning
+  // Publish the camera transform so modules that position DOM overlays over the
+  // world (remote cursors, chat bubbles, pings) can convert world coordinates to
+  // CSS pixels. Zoom and render scale are both required: zoom is canvas pixels
+  // per cell, and the canvas backing store is renderScale times its CSS size.
   setInterval(() => {
     canvas.dataset["viewX"] = activeRenderer.viewX.toString();
     canvas.dataset["viewY"] = activeRenderer.viewY.toString();
+    canvas.dataset["zoom"] = activeRenderer.zoom.toString();
+    canvas.dataset["renderScale"] = renderScale.toString();
   }, 50);
 
   // Ambient sound update: scan material cache for fire/water ratios (~4Hz)

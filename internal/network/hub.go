@@ -174,9 +174,12 @@ func (h *Hub) PlayerCount() int {
 
 // handleCursorMove broadcasts a player's cursor position to all other clients.
 func (h *Hub) handleCursorMove(sender *Client, msg *CursorMsg) {
+	// The nickname travels with the cursor so other clients can label it without
+	// having to maintain a separate roster keyed by player ID.
 	update := mustMarshal(CursorUpdateMsg{
 		Type:     MsgCursorUpdate,
 		PlayerID: sender.Player.ID,
+		Nickname: sender.Player.Nickname,
 		X:        msg.X,
 		Y:        msg.Y,
 		Power:    msg.Power,

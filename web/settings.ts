@@ -73,6 +73,7 @@ export class SettingsPanel {
 
     this.applyVisibility("minimap", this.settings.showMinimap);
     this.applyVisibility("footer", this.settings.showMetrics);
+    applyCursorVisibility(this.settings.showCursors);
     this.onRenderScaleChange?.(this.settings.renderScale);
   }
 
@@ -199,12 +200,10 @@ export class SettingsPanel {
 
     bind("#set-minimap", "showMinimap", (on) => this.applyVisibility("minimap", on));
     bind("#set-metrics", "showMetrics", (on) => this.applyVisibility("footer", on));
-    bind("#set-cursors", "showCursors", (on) => {
-      // Remote cursors are injected by the UI controller; hiding the container
-      // is enough and avoids reaching into that module's internals.
-      document.querySelectorAll<HTMLElement>(".remote-cursor")
-        .forEach((el) => { el.style.display = on ? "" : "none"; });
-    });
+    // Cursors are created and positioned continuously by the UI controller, so a
+    // class on the container is used rather than setting styles on each element,
+    // which would be undone on the next cursor update.
+    bind("#set-cursors", "showCursors", (on) => applyCursorVisibility(on));
   }
 
   private wireSessionActions(root: HTMLElement): void {
@@ -239,6 +238,12 @@ export class SettingsPanel {
   toggle(): void {
     this.isOpen() ? this.hide() : this.show();
   }
+}
+
+/** Toggles remote cursor visibility via a container class. */
+function applyCursorVisibility(visible: boolean): void {
+  document.getElementById("game-container")
+    ?.classList.toggle("hide-cursors", !visible);
 }
 
 function escapeHtml(s: string): string {

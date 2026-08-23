@@ -178,6 +178,7 @@ type CursorMsg struct {
 type CursorUpdateMsg struct {
 	Type     string `json:"type"`
 	PlayerID uint32 `json:"playerID"`
+	Nickname string `json:"nickname,omitempty"`
 	X        int    `json:"x"`
 	Y        int    `json:"y"`
 	Power    uint8  `json:"power"`

@@ -15,8 +15,20 @@
 
 import { WorldNetwork, MetricsData, PlayerState, RemoteCursor } from "./network.js";
 
-// Power colors for cursor rendering
-const POWER_COLORS = ["#4da8ff", "#ff6b35", "#88cc44", "#44ddaa"];
+// Power colors, shown as a small badge on each remote cursor.
+const POWER_COLORS = ["#4da8ff", "#ff6b35", "#88cc44", "#44ddaa", "#c77dff"];
+
+/**
+ * A stable, distinct colour per player.
+ *
+ * Cursors are coloured by identity rather than by the power being held, so two
+ * players wielding the same force are still tellable apart. Hues are spread by
+ * an irrational-ish step so nearby player IDs do not land on similar colours.
+ */
+function playerColor(playerID: number): string {
+  const hue = (playerID * 137.508) % 360;
+  return `hsl(${hue.toFixed(0)}, 72%, 55%)`;
+}
 const POWER_NAMES  = ["Rain", "Heat", "Wind", "Growth"];
 
 // DOM references resolved once at attach time
@@ -295,38 +307,73 @@ export class UIController {
       // Create a new cursor element
       const el = document.createElement("div");
       el.className = "remote-cursor";
+      // Built without interpolating the nickname: it is player-supplied, so it
+      // is assigned via textContent rather than innerHTML.
       el.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M1 1L6 14L8 8L14 6L1 1Z" fill="currentColor" stroke="rgba(0,0,0,0.3)" stroke-width="0.5"/>
         </svg>
-        <span class="cursor-label">P${cursor.playerID}</span>
+        <span class="cursor-label">
+          <span class="cursor-power"></span>
+          <span class="cursor-name"></span>
+        </span>
       `;
+      const nameEl = el.querySelector<HTMLElement>(".cursor-name")!;
+      nameEl.textContent = cursor.nickname || `Player ${cursor.playerID}`;
       elCanvasWrapper.appendChild(el);
       entry = { el, timeout: setTimeout(() => this.removeCursor(cursor.playerID), 5000) };
       this.cursors.set(cursor.playerID, entry);
     }
 
-    // Update position (world coords → screen coords)
+    // World coordinates to CSS pixels. Zoom is canvas pixels per cell, and the
+    // canvas backing store is renderScale times its displayed size, so CSS
+    // pixels per cell is zoom / renderScale. Omitting zoom put every cursor in
+    // the wrong place at any zoom level other than 1.
     const canvas = document.getElementById("world-canvas") as HTMLCanvasElement;
-    const sx = cursor.x - (this.network.worldW > 0 ? 0 : 0); // viewX is on renderer
-    // We approximate screen position. The renderer's viewX/viewY offset is the viewport origin.
-    // Since we can't directly access renderer here, we use a data attribute set by main.ts
-    const viewX = parseInt(canvas.dataset["viewX"] ?? "0", 10);
-    const viewY = parseInt(canvas.dataset["viewY"] ?? "0", 10);
-    const screenX = cursor.x - viewX;
-    const screenY = cursor.y - viewY;
+    const viewX = parseFloat(canvas.dataset["viewX"] ?? "0");
+    const viewY = parseFloat(canvas.dataset["viewY"] ?? "0");
+    const zoom = parseFloat(canvas.dataset["zoom"] ?? "1") || 1;
+    const scale = parseFloat(canvas.dataset["renderScale"] ?? "1") || 1;
+    const cssPerCell = zoom / scale;
 
-    const color = POWER_COLORS[cursor.power] ?? POWER_COLORS[0];
+    const screenX = (cursor.x - viewX) * cssPerCell;
+    const screenY = (cursor.y - viewY) * cssPerCell;
+
     entry.el.style.left = `${screenX}px`;
-    entry.el.style.top  = `${screenY}px`;
-    entry.el.style.color = color;
-    entry.el.style.display = (screenX >= 0 && screenY >= 0) ? "block" : "none";
+    entry.el.style.top = `${screenY}px`;
 
-    // Reset timeout
+    // Colour identifies the player; the badge shows what they are holding. Using
+    // the power for colour made two players wielding the same force identical.
+    entry.el.style.color = playerColor(cursor.playerID);
+
+    const badge = entry.el.querySelector<HTMLElement>(".cursor-power");
+    if (badge) badge.style.background = POWER_COLORS[cursor.power] ?? POWER_COLORS[0];
+
+    if (cursor.nickname) {
+      const nameEl = entry.el.querySelector<HTMLElement>(".cursor-name");
+      if (nameEl && nameEl.textContent !== cursor.nickname) {
+        nameEl.textContent = cursor.nickname;
+      }
+    }
+
+    // Hide once off-screen rather than letting it pile up at the edge.
+    const withinX = screenX >= 0 && screenX <= canvas.clientWidth;
+    const withinY = screenY >= 0 && screenY <= canvas.clientHeight;
+    entry.el.style.display = withinX && withinY ? "block" : "none";
+
+    // An idle cursor is stale, not gone: hide it, but do not announce a
+    // departure the server never reported.
     clearTimeout(entry.timeout);
-    entry.timeout = setTimeout(() => this.removeCursor(cursor.playerID), 5000);
+    entry.timeout = setTimeout(() => this.hideCursor(cursor.playerID), 5000);
   }
 
+  /** Hides a cursor that has stopped reporting, keeping the element for reuse. */
+  private hideCursor(playerID: number): void {
+    const entry = this.cursors.get(playerID);
+    if (entry) entry.el.style.display = "none";
+  }
+
+  /** Removes a cursor for a player who has actually disconnected. */
   private removeCursor(playerID: number): void {
     const entry = this.cursors.get(playerID);
     if (entry) {

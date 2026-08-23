@@ -741,7 +741,20 @@
       white-space: nowrap;
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
     }
+    /* Small dot showing which force the other player is holding. */
+    .cursor-power {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 4px currentColor;
+    }
+    /* Hidden via the "Show other players' cursors" setting. */
+    #game-container.hide-cursors .remote-cursor { display: none !important; }
 
     /* ── Toast Notifications ─────────────────────────────── */
     .toast {

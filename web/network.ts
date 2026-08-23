@@ -59,6 +59,8 @@ export interface PlayerState {
 
 export interface RemoteCursor {
   playerID: number;
+  /** Absent for clients that predate nicknames travelling with the cursor. */
+  nickname?: string;
   x:        number;
   y:        number;
   power:    number;
@@ -223,6 +225,7 @@ export class WorldNetwork {
       case "cursor_update": {
         const cursor: RemoteCursor = {
           playerID: msg["playerID"] as number,
+          nickname: msg["nickname"] as string | undefined,
           x:        msg["x"] as number,
           y:        msg["y"] as number,
           power:    msg["power"] as number,
