@@ -21,6 +21,8 @@ func simulateCell(w *world.World, x, y int) {
 		simulateSoil(w, x, y)
 	case world.MatPlant:
 		simulatePlant(w, x, y)
+	case world.MatGrass:
+		simulateGrass(w, x, y)
 	case world.MatFire:
 		simulateFire(w, x, y)
 	case world.MatVapor:
@@ -33,10 +35,11 @@ func simulateCell(w *world.World, x, y int) {
 		simulateOil(w, x, y)
 	case world.MatLava:
 		simulateLava(w, x, y)
-	case world.MatHerbivore:
-		simulateHerbivore(w, x, y)
-	case world.MatPredator:
-		simulatePredator(w, x, y)
+	case world.MatHerbivore, world.MatPredator, world.MatSheep:
+		// One routine drives every species; behaviour comes from its Trait entry.
+		if t, ok := Traits[w.Material[i]]; ok {
+			simulateCreature(w, x, y, t)
+		}
 	case world.MatCloud:
 		simulateCloud(w, x, y)
 	case world.MatVoid:

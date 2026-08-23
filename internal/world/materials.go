@@ -34,6 +34,16 @@ const (
 	// MatCarrion is a dead creature. It decays into soil nutrients, closing the
 	// loop rather than deleting biomass.
 	MatCarrion // 20
+
+	// MatSheep is a hardier, herding grazer: a larger reserve and a wider climate
+	// tolerance than a herbivore, but slower to breed.
+	MatSheep // 21
+
+	// MatGrass is the ground-cover producer. It regrows quickly on damp soil and
+	// is what grazers actually feed on; MatPlant is woody growth that forms trees
+	// and regrows far more slowly. Separating them gives the food web a base that
+	// can be depleted and recover on a useful timescale.
+	MatGrass // 22
 )
 
 // MaterialName returns a human-readable name for debug/serialization.
@@ -81,23 +91,36 @@ func MaterialName(m uint8) string {
 		return "plasma"
 	case MatCarrion:
 		return "carrion"
+	case MatSheep:
+		return "sheep"
+	case MatGrass:
+		return "grass"
 	default:
 		return "unknown"
 	}
 }
 
+// IsProducer returns true for photosynthesising materials — the base of the food
+// web, which grazers consume.
+func IsProducer(m uint8) bool {
+	return m == MatGrass || m == MatPlant
+}
+
 // IsSolid returns true for materials that block downward movement.
 func IsSolid(m uint8) bool {
 	switch m {
-	case MatRock, MatSoil, MatSand, MatPlant, MatIce, MatHerbivore, MatPredator, MatCarrion:
+	case MatRock, MatSoil, MatSand, MatPlant, MatIce,
+		MatHerbivore, MatPredator, MatSheep, MatCarrion:
 		return true
 	}
+	// Grass is deliberately not solid: it is thin ground cover, so creatures and
+	// falling material pass through it rather than standing on it.
 	return false
 }
 
 // IsFlammable returns true for materials that can catch fire.
 func IsFlammable(m uint8) bool {
-	return m == MatPlant || m == MatOil
+	return m == MatPlant || m == MatOil || m == MatGrass
 }
 
 // IsLiquid returns true for materials that flow laterally.
@@ -137,7 +160,7 @@ func IsHazard(m uint8) bool {
 
 // IsCreature returns true for living creature materials.
 func IsCreature(m uint8) bool {
-	return m == MatHerbivore || m == MatPredator
+	return m == MatHerbivore || m == MatPredator || m == MatSheep
 }
 
 // Density returns a relative density value for liquid displacement.

@@ -380,6 +380,8 @@ function buildPaletteData(): Uint8Array {
     [18, 130, 245,  90, 210],  // Radiation — sickly green
     [19, 190, 130, 255, 255],  // Plasma — violet-white
     [20,  92,  58,  52, 255],  // Carrion — dull red-brown
+    [21, 238, 232, 220, 255],  // Sheep — off-white fleece
+    [22,  92, 168,  62, 255],  // Grass — lighter and yellower than woody plants
   ];
   for (const [id, r, g, b, a] of defs) {
     data[id * 4]     = r;

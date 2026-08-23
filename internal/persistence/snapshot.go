@@ -198,5 +198,24 @@ func readSnapshot(r io.Reader, w *world.World) error {
 	if err := binary.Read(r, le, &w.Lifetime); err != nil {
 		return err
 	}
+
+	seedRestoredCreatures(w)
 	return nil
+}
+
+// seedRestoredCreatures gives every restored creature a food reserve.
+//
+// Energy and thirst are not part of the snapshot format, so a world loaded from
+// disk comes back with both zeroed. The simulation no longer tops up creatures
+// found with no reserve — that behaviour made starving creatures immortal — so
+// without this pass every creature in a restored world would die on its first
+// update and the ecosystem would be wiped out by reloading.
+func seedRestoredCreatures(w *world.World) {
+	const restoredEnergy = 140
+	for i, m := range w.Material {
+		if world.IsCreature(m) {
+			w.Energy[i] = restoredEnergy
+			w.Thirst[i] = 0
+		}
+	}
 }

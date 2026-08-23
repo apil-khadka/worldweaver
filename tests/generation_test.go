@@ -32,8 +32,11 @@ func TestGeneratedWorldHasVisibleVariety(t *testing.T) {
 		}
 	}
 
-	if got := pct(world.MatPlant); got < 0.4 {
-		t.Errorf("plant coverage %.2f%%, want at least 0.4%%", got)
+	// Vegetation is now two materials: grass is the fast-regrowing ground cover
+	// that grazers feed on, and plants are woody growth forming trees. Coverage is
+	// measured across both, since either alone understates how green the world is.
+	if got := pct(world.MatGrass) + pct(world.MatPlant); got < 0.4 {
+		t.Errorf("vegetation coverage %.2f%%, want at least 0.4%%", got)
 	}
 
 	// Vegetation has to be spread across the map, not clustered in one band.
@@ -44,13 +47,19 @@ func TestGeneratedWorldHasVisibleVariety(t *testing.T) {
 		has := false
 		run := 0
 		for y := 0; y < w.Height; y++ {
-			if w.Material[y*w.Width+x] == world.MatPlant {
+			switch w.Material[y*w.Width+x] {
+			case world.MatPlant:
+				// Only woody growth counts toward height: grass is a single layer,
+				// so including it would mask trees failing to grow.
 				has = true
 				run++
 				if run > tallestRun {
 					tallestRun = run
 				}
-			} else {
+			case world.MatGrass:
+				has = true
+				run = 0
+			default:
 				run = 0
 			}
 		}
@@ -95,10 +104,12 @@ func TestVegetationSurvivesSimulation(t *testing.T) {
 	w := world.New(512, 256, 20260823)
 	w.Generate()
 
+	// Counts both producer types. Grazers eat grass by preference and fall back to
+	// woody growth, so measuring only plants reports grazing as vegetation loss.
 	countPlants := func() int {
 		n := 0
 		for _, m := range w.Material {
-			if m == world.MatPlant {
+			if world.IsProducer(m) {
 				n++
 			}
 		}

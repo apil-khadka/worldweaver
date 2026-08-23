@@ -37,6 +37,10 @@ func (w *World) Swap(x1, y1, x2, y2 int) {
 	w.Moisture[i], w.Moisture[j] = w.Moisture[j], w.Moisture[i]
 	w.Temperature[i], w.Temperature[j] = w.Temperature[j], w.Temperature[i]
 	w.Lifetime[i], w.Lifetime[j] = w.Lifetime[j], w.Lifetime[i]
+	// Creature state must travel with the creature, or moving would reset a
+	// creature's reserves and it would never starve or grow thirsty.
+	w.Energy[i], w.Energy[j] = w.Energy[j], w.Energy[i]
+	w.Thirst[i], w.Thirst[j] = w.Thirst[j], w.Thirst[i]
 	w.MarkDirty(x1, y1)
 	w.MarkDirty(x2, y2)
 }

@@ -194,14 +194,39 @@ func applyHeat(w *world.World, x, y, i int, intensity float32, dx, dy int) {
 	}
 }
 
-// applyGrowth seeds new plant cells on moist soil.
+// applyGrowth seeds vegetation on moist ground.
+//
+// Grass comes first and most readily: it is the renewable base of the food web,
+// so encouraging it is how a player feeds grazers. Woody growth appears less
+// often and on wetter ground, and grass already present may be promoted into it.
 func applyGrowth(w *world.World, x, y, i int, intensity float32) {
-	if w.Material[i] == world.MatSoil && w.Moisture[i] >= 20 {
-		if w.RNG().Float32() < intensity*0.05 {
-			// Plant on the cell above if empty
-			if w.GetMaterial(x, y-1) == world.MatEmpty {
-				w.SetMaterial(x, y-1, world.MatPlant)
-			}
+	mat := w.Material[i]
+
+	// Promote established grass into woody growth where the ground is rich.
+	if mat == world.MatGrass && w.GetMoisture(x, y+1) >= 120 {
+		if w.RNG().Float32() < intensity*0.02 {
+			w.SetMaterial(x, y, world.MatPlant)
+		}
+		return
+	}
+
+	if mat != world.MatSoil && mat != world.MatSand {
+		return
+	}
+	if w.Moisture[i] < 20 {
+		return
+	}
+
+	above := w.Index(x, y-1)
+	if above < 0 || w.Material[above] != world.MatEmpty {
+		return
+	}
+
+	if w.RNG().Float32() < intensity*0.12 {
+		w.SetMaterial(x, y-1, world.MatGrass)
+		// Damp the ground a little so the new growth can hold on.
+		if w.Moisture[i] < 90 {
+			w.Moisture[i] = 90
 		}
 	}
 }
@@ -236,12 +261,27 @@ func applyWind(w *world.World, x, y, i int, intensity float32) {
 	}
 }
 
-// applyLife spawns herbivore creatures on empty cells.
+// applyLife spawns grazing creatures on empty cells.
+//
+// Which grazer appears depends on the ground: sheep favour grassy soil, plain
+// herbivores turn up anywhere. Newborns are given their species' starting
+// reserve, otherwise they would starve on their first update.
 func applyLife(w *world.World, x, y, i int, intensity float32) {
-	if w.Material[i] == world.MatEmpty {
-		if w.RNG().Float32() < intensity*0.08 {
-			w.SetMaterial(x, y, world.MatHerbivore)
-			w.Temperature[i] = int16(herbivoreInitialEnergy)
-		}
+	if w.Material[i] != world.MatEmpty {
+		return
+	}
+	if w.RNG().Float32() >= intensity*0.08 {
+		return
+	}
+
+	species := world.MatHerbivore
+	if w.GetMaterial(x, y+1) == world.MatSoil && w.RNG().Intn(2) == 0 {
+		species = world.MatSheep
+	}
+
+	w.SetMaterial(x, y, species)
+	if t, ok := Traits[species]; ok {
+		w.Energy[i] = t.StartEnergy
+		w.Thirst[i] = 0
 	}
 }

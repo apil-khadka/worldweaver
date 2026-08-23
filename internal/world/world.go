@@ -19,6 +19,13 @@ type World struct {
 	Lifetime    []uint16 // ticks remaining for transient materials (fire, smoke, vapor)
 	Flags       []uint8  // per-cell bit flags
 
+	// Creature state. Energy previously shared the Temperature array, which meant
+	// the Heat power wrote straight into a creature's energy and made anything it
+	// touched effectively immortal. It also left no way to give creatures a
+	// temperature response, since the field was already spoken for.
+	Energy []uint8 // 0–255 food reserve; 0 means starved
+	Thirst []uint8 // 0–255, rises until the creature drinks
+
 	// Chunks
 	Chunks     []Chunk
 	ChunkW     int // width in chunks
@@ -43,6 +50,8 @@ func New(width, height int, seed int64) *World {
 		Moisture:    make([]uint8, size),
 		Lifetime:    make([]uint16, size),
 		Flags:       make([]uint8, size),
+		Energy:      make([]uint8, size),
+		Thirst:      make([]uint8, size),
 		ChunkSize:   64,
 		rng:         rand.New(rand.NewSource(seed)),
 	}

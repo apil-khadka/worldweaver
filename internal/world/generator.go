@@ -311,6 +311,46 @@ func (g *generator) generate() {
 		}
 	}
 
+	// ── GRASS ────────────────────────────────────────────────────────────────
+	// Ground cover over every damp surface. This is what grazers actually feed
+	// on: woody growth regrows too slowly to sustain a population, so without a
+	// grass layer the food web has no renewable base.
+	for x := range W {
+		frac := float64(x) / float64(W)
+		for dy := -3; dy <= 3; dy++ {
+			y := heights[x] + dy
+			if y < 2 || y >= H {
+				continue
+			}
+			ground := w.Material[y*W+x]
+			aboveIdx := (y-1)*W + x
+			if w.Material[aboveIdx] != MatEmpty {
+				continue
+			}
+			if ground != MatSoil && ground != MatSand {
+				continue
+			}
+
+			// Give the surface enough moisture to hold grass, then seed it.
+			gi := y*W + x
+			if w.Moisture[gi] < 70 {
+				w.Moisture[gi] = 70
+			}
+
+			chance := 88
+			if ground == MatSand {
+				chance = 22 // sparse desert tufts
+			}
+			if frac >= 0.30 && frac < 0.44 {
+				chance /= 3 // volcanic slopes stay bare
+			}
+			if g.rng.Intn(100) < chance {
+				w.Material[aboveIdx] = MatGrass
+			}
+			break
+		}
+	}
+
 	// ── GENERAL SURFACE VEGETATION ──────────────────────────────────────────
 	// The forest pass above only covers roughly a quarter of the map width, and
 	// single-cell growth is invisible when the whole world is on screen. This
@@ -328,7 +368,13 @@ func (g *generator) generate() {
 				continue
 			}
 			m := w.Material[y*W+x]
-			if (m == MatSoil || m == MatSand) && w.Material[(y-1)*W+x] == MatEmpty {
+			if m != MatSoil && m != MatSand {
+				continue
+			}
+			// Trees grow through ground cover, so grass overhead is not an
+			// obstruction. Requiring bare air here left trees almost nowhere to
+			// go once the grass layer was added.
+			if a := w.Material[(y-1)*W+x]; a == MatEmpty || a == MatGrass {
 				groundY, ground = y, m
 				break
 			}
@@ -371,11 +417,14 @@ func (g *generator) generate() {
 			}
 		}
 
-		// Trunk.
+		// Trunk. Grass is overgrown rather than treated as a blocker.
 		topY := groundY - 1
 		for i := 0; i < height; i++ {
 			y := groundY - 1 - i
-			if y < 2 || w.Material[y*W+x] != MatEmpty {
+			if y < 2 {
+				break
+			}
+			if m := w.Material[y*W+x]; m != MatEmpty && m != MatGrass {
 				break
 			}
 			w.Material[y*W+x] = MatPlant
@@ -485,42 +534,75 @@ func (g *generator) generate() {
 		}
 	}
 
-	// ── CREATURES: herbivores in forest, predators on rocky crags ────────────
-	// Herbivores scattered through the forest
-	for x := forestLeft; x < forestRight; x += 8 {
-		if g.rng.Intn(100) > 30 {
+	// ── CREATURES ───────────────────────────────────────────────────────────
+	// Grazers populate any vegetated ground across the whole map, not just the
+	// forest band: confining them to one region left most of the world lifeless.
+	// Stepping by a fixed column interval makes the population scale with world
+	// width rather than being a fixed head count.
+	for x := 0; x < W; x += 6 {
+		if g.rng.Intn(100) > 45 {
 			continue
 		}
+		frac := float64(x) / float64(W)
 		surfY := heights[x]
-		// Place herbivore on first available surface
-		for y := surfY - 5; y < surfY+2; y++ {
-			if y < 1 || y >= H {
+
+		for dy := -5; dy <= 2; dy++ {
+			y := surfY + dy
+			if y < 2 || y >= H {
 				continue
 			}
-			below := w.Material[y*W+x]
-			above := w.Material[(y-1)*W+x]
-			if (below == MatSoil || below == MatPlant) && above == MatEmpty {
-				w.Material[(y-1)*W+x] = MatHerbivore
+			ground := w.Material[y*W+x]
+			aboveIdx := (y-1)*W + x
+			// Grass may be standing here; a grazer occupies it rather than being
+			// blocked by it. Requiring bare air left almost nowhere to place
+			// animals once the grass layer existed.
+			if a := w.Material[aboveIdx]; a != MatEmpty && a != MatGrass {
+				continue
+			}
+			if ground != MatSoil && ground != MatPlant && ground != MatSand {
+				continue
+			}
+
+			// Sheep favour soil pasture; plain herbivores are less fussy and are
+			// the only grazer that takes to sand.
+			species := MatHerbivore
+			if ground != MatSand && g.rng.Intn(100) < 55 {
+				species = MatSheep
+			}
+			// Desert supports far less grazing.
+			if frac < 0.25 && g.rng.Intn(100) < 70 {
 				break
 			}
+
+			w.Material[aboveIdx] = species
+			seedCreature(w, aboveIdx)
+			break
 		}
 	}
-	// Predators on volcanic rocky areas
-	volcanoLeft := int(0.28 * float64(W))
-	volcanoRight := int(0.42 * float64(W))
-	for x := volcanoLeft; x < volcanoRight; x += 15 {
-		if g.rng.Intn(100) > 25 {
+
+	// Predators, at a lower density than their prey.
+	//
+	// These previously required bare rock at the surface, but the terrain fill
+	// lays soil over the cliff and volcano zones, so that condition almost never
+	// held and no predators were generated at all.
+	for x := 0; x < W; x += 24 {
+		if g.rng.Intn(100) > 55 {
 			continue
 		}
 		surfY := heights[x]
-		for y := surfY - 3; y < surfY+2; y++ {
-			if y < 1 || y >= H {
+		for dy := -3; dy <= 2; dy++ {
+			y := surfY + dy
+			if y < 2 || y >= H {
 				continue
 			}
-			below := w.Material[y*W+x]
-			above := w.Material[(y-1)*W+x]
-			if below == MatRock && above == MatEmpty {
-				w.Material[(y-1)*W+x] = MatPredator
+			ground := w.Material[y*W+x]
+			aboveIdx := (y-1)*W + x
+			if a := w.Material[aboveIdx]; a != MatEmpty && a != MatGrass {
+				continue
+			}
+			if ground == MatRock || ground == MatSoil || ground == MatSand {
+				w.Material[aboveIdx] = MatPredator
+				seedCreature(w, aboveIdx)
 				break
 			}
 		}
@@ -622,4 +704,16 @@ func (g *generator) carveCave(cx, cy, length, radius int) {
 		x += g.rng.Intn(7) - 3
 		y += g.rng.Intn(5) - 2
 	}
+}
+
+// seedCreature gives a freshly generated creature a starting food reserve.
+//
+// Species traits live in the simulation package, which cannot be imported here
+// without a cycle, so generation seeds a reasonable mid-range reserve. The
+// simulation treats a creature with no reserve as newly placed and tops it up to
+// its species' starting value, so this is a hint rather than the source of truth.
+func seedCreature(w *World, i int) {
+	const generatedEnergy = 140
+	w.Energy[i] = generatedEnergy
+	w.Thirst[i] = 0
 }
