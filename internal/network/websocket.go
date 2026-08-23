@@ -3,8 +3,10 @@ package network
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
@@ -35,11 +37,39 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Static frontend
-	r.Handle("/*", http.FileServer(staticFS))
+	// Static frontend — serves built files from web/dist/
+	//
+	// Vite emits content-hashed filenames under /assets, so those are safe to
+	// cache indefinitely. HTML entry points must never be cached or clients
+	// would keep loading stale bundles after a deploy.
+	fileServer := http.FileServer(staticFS)
+	r.Handle("/*", staticCacheHeaders(fileServer))
 
-	// Root API info
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	// SPA-style route: /play serves play.html (landing page links here)
+	r.Get("/play", func(w http.ResponseWriter, r *http.Request) {
+		f, err := staticFS.Open("play.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		stat, err := f.Stat()
+		if err != nil {
+			http.Error(w, "cannot stat play.html", http.StatusInternalServerError)
+			return
+		}
+		seeker, ok := f.(io.ReadSeeker)
+		if !ok {
+			http.Error(w, "play.html is not seekable", http.StatusInternalServerError)
+			return
+		}
+		// HTML shells must always revalidate so a new build is picked up.
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeContent(w, r, "play.html", stat.ModTime(), seeker)
+	})
+
+	// API info endpoint (moved from / to /api so index.html can be served at root)
+	r.Get("/api", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"name":    "WorldWeaver API",
@@ -59,6 +89,7 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 
 	// ── Auth ─────────────────────────────────────────────────────────────────
 	r.Post("/api/login", hub.handleLogin)
+	r.Get("/api/session", hub.handleSession)
 
 	// ── Worlds ───────────────────────────────────────────────────────────────
 	r.Get("/api/worlds", hub.handleListWorlds)
@@ -111,6 +142,53 @@ func (h *Hub) handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"token":    sess.Token,
+		"playerID": sess.PlayerID,
+		"nickname": sess.Nickname,
+	})
+}
+
+// staticCacheHeaders sets Cache-Control appropriate to the asset being served.
+//
+// Fingerprinted bundles under /assets never change for a given URL, so they get
+// a long immutable TTL. Everything else (HTML shells in particular) is revalidated
+// on each load so a new deploy is picked up immediately.
+func staticCacheHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasPrefix(path, "/assets/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case path == "/" || strings.HasSuffix(path, ".html"):
+			w.Header().Set("Cache-Control", "no-cache")
+		default:
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handleSession reports whether a bearer token is still valid.
+//
+// Sessions live in memory, so a server restart invalidates every token. The
+// client uses this endpoint on load to decide between resuming silently and
+// re-authenticating, instead of always forcing the player back to the lobby.
+func (h *Hub) handleSession(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+
+	sess := h.auth.Validate(token)
+	if sess == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired token"})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
 		"playerID": sess.PlayerID,
 		"nickname": sess.Nickname,
 	})
@@ -275,8 +353,11 @@ func (h *Hub) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Tick:     h.world.Tick,
 	})
 
-	// Send initial full snapshot of the viewport
-	SendFullSnapshot(c, h.world)
+	// The snapshot is deliberately not sent here. The client's visible region is
+	// still unknown at this point (its HELLO/VIEWPORT message is handled by the
+	// read pump below), so a snapshot sent now would cover a 0x0 area and the
+	// client would have nothing to render. The read pump sends it as soon as the
+	// viewport is reported.
 
 	ctx := r.Context()
 	go c.writePump(ctx)

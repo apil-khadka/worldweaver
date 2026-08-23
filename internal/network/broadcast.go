@@ -46,7 +46,7 @@ func (h *Hub) BroadcastChunkUpdates(w *world.World) {
 
 	// Record outbound bytes for metrics
 	if h.metrics != nil {
-		h.metrics.OutboundBPS.Add(totalBytes)
+		h.metrics.RecordOutbound(totalBytes)
 	}
 
 	w.ClearDirty()
@@ -77,22 +77,39 @@ func (h *Hub) BroadcastMetrics(snap metrics.Snapshot, stability float32, tick ui
 // Used when a client first connects or after a reconnect.
 func SendFullSnapshot(c *Client, w *world.World) {
 	cx, cy, cw, ch := c.Player.Camera()
-	// Clamp viewport to world bounds
 	x := int(cx)
 	y := int(cy)
 	ww := int(cw)
 	wh := int(ch)
+
+	// The client may not have reported its viewport yet (the HELLO/VIEWPORT
+	// message is processed by the read pump, which starts after this call).
+	// In that case send the whole world so the client always has data to
+	// render instead of an empty snapshot.
+	if ww <= 0 || wh <= 0 {
+		x, y = 0, 0
+		ww, wh = w.Width, w.Height
+	}
+
+	// Clamp viewport to world bounds
 	if x < 0 {
 		x = 0
 	}
 	if y < 0 {
 		y = 0
 	}
+	if x >= w.Width || y >= w.Height {
+		x, y = 0, 0
+		ww, wh = w.Width, w.Height
+	}
 	if x+ww > w.Width {
 		ww = w.Width - x
 	}
 	if y+wh > w.Height {
 		wh = w.Height - y
+	}
+	if ww <= 0 || wh <= 0 {
+		return
 	}
 
 	data := make([]byte, ww*wh)

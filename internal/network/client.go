@@ -21,6 +21,11 @@ const (
 	writeQueueDepth = 64
 )
 
+// snapshotMinInterval throttles how often a client may trigger a full snapshot.
+// Panning emits viewport messages continuously, and each snapshot is large, so
+// they are rate limited. Ongoing changes still arrive via chunk updates.
+const snapshotMinInterval = time.Second
+
 // Client represents a single connected browser.
 type Client struct {
 	Player  *game.Player
@@ -29,6 +34,19 @@ type Client struct {
 	conn    *websocket.Conn
 	send    chan []byte
 	limiter *ClientRateLimiter
+
+	// lastSnapshot is when this client was last sent a full snapshot.
+	lastSnapshot time.Time
+}
+
+// maybeSendSnapshot sends a full snapshot for the client's current viewport,
+// unless one was sent very recently.
+func (c *Client) maybeSendSnapshot() {
+	if time.Since(c.lastSnapshot) < snapshotMinInterval {
+		return
+	}
+	c.lastSnapshot = time.Now()
+	SendFullSnapshot(c, c.hub.world)
 }
 
 // newClient constructs a Client and immediately starts its write pump.
@@ -110,6 +128,10 @@ func (c *Client) readPump(ctx context.Context) {
 			var msg HelloMsg
 			if err := json.Unmarshal(data, &msg); err == nil {
 				c.Player.SetCamera(0, 0, msg.ViewW, msg.ViewH)
+				// Now that the visible region is known, send the world the
+				// client can actually draw. Sending before this point produced
+				// an empty snapshot, because the camera was still 0x0.
+				c.maybeSendSnapshot()
 			}
 
 		case MsgPowerInput:
@@ -129,6 +151,7 @@ func (c *Client) readPump(ctx context.Context) {
 			var msg ViewportMsg
 			if err := json.Unmarshal(data, &msg); err == nil {
 				c.Player.SetCamera(msg.X, msg.Y, msg.W, msg.H)
+				c.maybeSendSnapshot()
 			}
 
 		case MsgPing:

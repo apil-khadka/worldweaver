@@ -31,6 +31,13 @@ export interface LobbySelection {
 
 const STORAGE_KEY_NICKNAME = "ww_nickname";
 const STORAGE_KEY_TOKEN    = "ww_token";
+const STORAGE_KEY_WORLD    = "ww_world";
+
+/** Clears the stored session so the next load shows the lobby. */
+export function clearStoredSession(): void {
+  localStorage.removeItem(STORAGE_KEY_TOKEN);
+  localStorage.removeItem(STORAGE_KEY_WORLD);
+}
 
 export class Lobby {
   private overlay:      HTMLElement;
@@ -63,15 +70,88 @@ export class Lobby {
   }
 
   /**
-   * Shows the lobby and returns when the user picks a world.
+   * Resolves with the world to join.
+   *
+   * On a page refresh we try to resume the previous session so the player is
+   * not sent back through the lobby every time. The lobby UI is only shown
+   * when there is nothing to resume, the stored world is gone, or the player
+   * explicitly asked for it via `?lobby=1`.
    */
-  show(): Promise<LobbySelection> {
+  async show(): Promise<LobbySelection> {
+    const params = new URLSearchParams(location.search);
+    const forceLobby = params.has("lobby");
+
+    // Direct join: /play?world=genesis skips the lobby entirely. Useful for
+    // sharing a link straight into a specific world.
+    const requested = params.get("world");
+    if (requested && !forceLobby) {
+      const nickname = params.get("nick")
+        ?? localStorage.getItem(STORAGE_KEY_NICKNAME)
+        ?? "Guest";
+      if (await this.requestLogin(nickname)) {
+        localStorage.setItem(STORAGE_KEY_WORLD, requested);
+        return { token: this.token, worldID: requested, nickname: this.nickname };
+      }
+    }
+
+    if (!forceLobby) {
+      const resumed = await this.tryResume();
+      if (resumed) return resumed;
+    }
+
     this.overlay.classList.add("visible");
     this.loadWorlds();
 
     return new Promise((resolve) => {
       this.resolve = resolve;
     });
+  }
+
+  /**
+   * Attempts to restore the previous session without user interaction.
+   *
+   * Auth sessions are held in server memory, so a server restart invalidates
+   * stored tokens. In that case we silently re-login with the saved nickname
+   * rather than interrupting the player.
+   */
+  private async tryResume(): Promise<LobbySelection | null> {
+    const worldID  = localStorage.getItem(STORAGE_KEY_WORLD);
+    const nickname = localStorage.getItem(STORAGE_KEY_NICKNAME);
+    if (!worldID || !nickname) return null;
+
+    // The world must still exist before we try to rejoin it.
+    let worlds: WorldInfo[];
+    try {
+      const resp = await fetch("/api/worlds");
+      if (!resp.ok) return null;
+      worlds = await resp.json();
+    } catch {
+      return null;
+    }
+    const target = worlds.find((w) => w.id === worldID);
+    if (!target || target.playerCount >= target.maxPlayers) return null;
+
+    // Reuse the stored token when the server still recognises it.
+    const stored = localStorage.getItem(STORAGE_KEY_TOKEN);
+    if (stored) {
+      try {
+        const resp = await fetch("/api/session", {
+          headers: { Authorization: stored },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          this.token = stored;
+          this.nickname = data.nickname ?? nickname;
+          return { token: this.token, worldID, nickname: this.nickname };
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    // Token missing or expired — re-authenticate quietly with the same name.
+    if (!(await this.requestLogin(nickname))) return null;
+    return { token: this.token, worldID, nickname: this.nickname };
   }
 
   hide(): void {
@@ -82,14 +162,31 @@ export class Lobby {
     const nickname = this.nicknameInput.value.trim() || "Anonymous";
     localStorage.setItem(STORAGE_KEY_NICKNAME, nickname);
 
-    // Check for existing token
+    // Reuse the stored token only if the server still accepts it. Sessions are
+    // in-memory server-side, so a restart makes old tokens unusable.
     const existingToken = localStorage.getItem(STORAGE_KEY_TOKEN);
     if (existingToken) {
-      this.token = existingToken;
-      this.nickname = nickname;
-      return true;
+      try {
+        const resp = await fetch("/api/session", {
+          headers: { Authorization: existingToken },
+        });
+        if (resp.ok) {
+          this.token = existingToken;
+          this.nickname = nickname;
+          return true;
+        }
+      } catch {
+        this.setStatus("Connection error", true);
+        return false;
+      }
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
     }
 
+    return this.requestLogin(nickname);
+  }
+
+  /** Requests a fresh token for the given nickname. */
+  private async requestLogin(nickname: string): Promise<boolean> {
     try {
       const resp = await fetch("/api/login", {
         method: "POST",
@@ -104,8 +201,9 @@ export class Lobby {
       this.token = data.token;
       this.nickname = data.nickname;
       localStorage.setItem(STORAGE_KEY_TOKEN, data.token);
+      localStorage.setItem(STORAGE_KEY_NICKNAME, data.nickname);
       return true;
-    } catch (e) {
+    } catch {
       this.setStatus("Connection error", true);
       return false;
     }
@@ -157,6 +255,9 @@ export class Lobby {
     this.setStatus("Logging in…", false);
     const ok = await this.login();
     if (!ok) return;
+
+    // Remember the world so a refresh can rejoin it without the lobby.
+    localStorage.setItem(STORAGE_KEY_WORLD, worldID);
 
     this.setStatus("", false);
     this.resolve?.({
