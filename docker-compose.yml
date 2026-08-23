@@ -40,7 +40,7 @@ services:
     container_name: worldweaver-frontend
     restart: unless-stopped
     environment:
-      - BACKEND_HOST=worldweaver-backend
+      - BACKEND_URL=http://worldweaver-backend:8080
     ports:
       - "80:80"
     depends_on:
