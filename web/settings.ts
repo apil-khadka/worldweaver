@@ -7,7 +7,7 @@
  */
 
 import { AudioEngine } from "./audio.js";
-import { clearStoredSession } from "./lobby.js";
+import { endSession } from "./lobby.js";
 
 const STORAGE_KEY = "ww_settings";
 
@@ -215,8 +215,10 @@ export class SettingsPanel {
       location.href = url.toString();
     });
 
-    root.querySelector("#set-logout")!.addEventListener("click", () => {
-      clearStoredSession();
+    root.querySelector("#set-logout")!.addEventListener("click", async () => {
+      // Tell the server first. Clearing local storage on its own left the token
+      // valid until it expired, so logging out did not end the session.
+      await endSession();
       const url = new URL(location.href);
       url.search = "";
       location.href = url.toString();

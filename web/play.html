@@ -958,6 +958,88 @@
     #lobby-create-submit:hover {
       opacity: 0.85;
     }
+    .lobby-identity {
+      margin-top: 6px;
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--muted);
+    }
+    .lobby-inline {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .lobby-inline .lobby-input {
+      margin-bottom: 0;
+    }
+    .lobby-secondary-btn {
+      padding: 10px 14px;
+      white-space: nowrap;
+      background: #FFFDFA;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lobby-secondary-btn:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    /* Owner-only controls on a world row: invite and visibility. */
+    .lobby-row-btn {
+      margin-left: 6px;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: capitalize;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lobby-row-btn:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .lobby-badge {
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+    .lobby-badge-unlisted {
+      background: rgba(212, 136, 26, 0.12);
+      color: var(--accent);
+    }
+    .lobby-badge-private {
+      background: rgba(120, 120, 140, 0.14);
+      color: var(--muted);
+    }
+    .lobby-keys {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    /* The key box stays hidden until asked for: it is the private key, and it
+       should not sit on screen by default. */
+    .lobby-keybox {
+      display: none;
+      margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      resize: vertical;
+    }
+    .lobby-keybox.visible {
+      display: block;
+    }
     .lobby-status {
       text-align: center;
       font-size: 12px;
@@ -1264,23 +1346,57 @@
       <div class="lobby-subtitle">One World. Many Forces.</div>
 
       <div class="lobby-section">
-        <label>Your Name</label>
+        <label for="lobby-nickname">Your Name</label>
         <input type="text" id="lobby-nickname" class="lobby-input" placeholder="Enter nickname…" maxlength="20" />
+        <!-- There is no password field: this device holds a keypair and signs a
+             challenge to prove who it is. The name is just a label on that key. -->
+        <div id="lobby-identity" class="lobby-identity">Preparing your key…</div>
       </div>
 
       <div class="lobby-section">
-        <label>Available Worlds</label>
+        <label>Worlds</label>
         <div id="lobby-world-list"></div>
+      </div>
+
+      <div class="lobby-section">
+        <label for="lobby-invite-code">Have an invite code?</label>
+        <div class="lobby-inline">
+          <input type="text" id="lobby-invite-code" class="lobby-input" placeholder="e.g. K7QM2XPA" maxlength="16" autocomplete="off" spellcheck="false" />
+          <button id="lobby-redeem-btn" class="lobby-secondary-btn">Join</button>
+        </div>
       </div>
 
       <button id="lobby-create-btn">+ Create New World</button>
       <div id="lobby-create-panel">
         <input type="text" id="lobby-create-name" class="lobby-input" placeholder="World name…" maxlength="30" />
         <input type="number" id="lobby-create-seed" class="lobby-input" placeholder="Seed (random if empty)" />
+        <label for="lobby-create-size">Size</label>
+        <select id="lobby-create-size" class="lobby-input"></select>
+        <label for="lobby-create-visibility">Who can join</label>
+        <select id="lobby-create-visibility" class="lobby-input">
+          <option value="public" selected>Public — listed for everyone</option>
+          <option value="unlisted">Unlisted — hidden, anyone with the link</option>
+          <option value="private">Private — invited players only</option>
+        </select>
+        <label for="lobby-create-maxplayers">Player limit</label>
+        <input type="number" id="lobby-create-maxplayers" class="lobby-input" min="1" max="8" value="8" />
         <button id="lobby-create-submit">Create World</button>
       </div>
 
       <div id="lobby-status" class="lobby-status"></div>
+
+      <div class="lobby-section lobby-keys">
+        <label>Identity key</label>
+        <p class="lobby-world-meta">
+          Your worlds belong to this key, and only this browser has it. Save a copy
+          to keep them if you clear your browser data or move to another machine.
+        </p>
+        <div class="lobby-inline">
+          <button id="lobby-identity-export" class="lobby-secondary-btn">Show my key</button>
+          <button id="lobby-identity-import" class="lobby-secondary-btn">Restore a key</button>
+        </div>
+        <textarea id="lobby-identity-key" class="lobby-input lobby-keybox" rows="3" spellcheck="false" autocomplete="off"></textarea>
+      </div>
     </div>
   </div>
 
