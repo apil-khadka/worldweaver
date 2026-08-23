@@ -111,6 +111,16 @@ func applyPlace(w *world.World, x, y, i int, mat uint8) {
 		w.Temperature[i] = 1200
 	case world.MatIce:
 		w.Temperature[i] = -100
+	case world.MatVoid:
+		// Lifetime bounds how much a void can consume before it collapses.
+		w.Lifetime[i] = voidInitialLifetime
+	case world.MatRadiation:
+		w.Lifetime[i] = radiationInitialLifetime
+	case world.MatPlasma:
+		w.Lifetime[i] = plasmaInitialLifetime
+		w.Temperature[i] = plasmaHeat
+	case world.MatCarrion:
+		w.Lifetime[i] = carrionInitialLifetime
 	case world.MatSoil, world.MatSand:
 		// Give fresh ground enough moisture to support growth, otherwise
 		// anything planted on it withers immediately.

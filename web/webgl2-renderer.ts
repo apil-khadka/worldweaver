@@ -65,6 +65,10 @@ const uint MAT_ASH   = 11u;
 const uint MAT_OIL   = 12u;
 const uint MAT_EMBER = 13u;
 const uint MAT_CLOUD = 16u;
+const uint MAT_VOID  = 17u;
+const uint MAT_RAD   = 18u;
+const uint MAT_PLASMA = 19u;
+const uint MAT_CARRION = 20u;
 
 // Opaque terrain: blocks light and forms the visible landscape silhouette.
 bool isTerrain(uint m) {
@@ -287,6 +291,31 @@ void main() {
       col += vec3(0.0, 0.02, 0.05) * (hash(cellCoord * 0.5) + 0.4);
     }
 
+    // ── Exotic materials ──────────────────────────────────────────────────
+    if (matID == MAT_PLASMA) {
+      // Fast, bright churn so plasma reads as violent rather than merely hot.
+      float phase = hash(cellCoord) * TAU;
+      float a = sin(u_time * 17.0 + phase) * 0.5 + 0.5;
+      float b = sin(u_time * 23.0 + phase * 2.1) * 0.5 + 0.5;
+      col = mix(col, vec3(1.0, 0.97, 1.0), (a * 0.6 + b * 0.4) * 0.7);
+    }
+    if (matID == MAT_RAD) {
+      // Slow pulse, suggesting something invisible doing damage.
+      float phase = hash(cellCoord) * TAU;
+      float pulse = sin(u_time * 3.5 + phase) * 0.5 + 0.5;
+      col = mix(col, vec3(0.75, 1.0, 0.45), pulse * 0.45);
+    }
+    if (matID == MAT_VOID) {
+      // Absence of light: crush toward black and add a faint violet rim so the
+      // hole is still legible against a dark cave.
+      col *= 0.35;
+      float phase = hash(cellCoord) * TAU;
+      col += vec3(0.10, 0.02, 0.16) * (sin(u_time * 2.0 + phase) * 0.5 + 0.5);
+    }
+    if (matID == MAT_CARRION) {
+      col *= 0.9 + hash(cellCoord) * 0.15;
+    }
+
     // Underground materials sit in progressively dimmer light.
     if (isTerrain(matID)) {
       col *= mix(1.0, 0.55, smoothstep(0.15, 1.0, depth));
@@ -297,7 +326,8 @@ void main() {
   // Fire and lava spill warm light onto everything around them, which sells the
   // simulation far more than colouring the burning cell alone. Kept to a 3x3
   // neighbourhood so the per-fragment sample count stays modest.
-  if (u_hasEmissive == 1 && matID != MAT_FIRE && matID != MAT_LAVA && matID != MAT_EMBER) {
+  if (u_hasEmissive == 1 && matID != MAT_FIRE && matID != MAT_LAVA
+      && matID != MAT_EMBER && matID != MAT_PLASMA) {
     float glow = 0.0;
     for (int dy = -1; dy <= 1; dy++) {
       for (int dx = -1; dx <= 1; dx++) {
@@ -305,6 +335,9 @@ void main() {
         uint nm = sampleMat(cellCoord + vec2(float(dx), float(dy)));
         if (nm == MAT_FIRE || nm == MAT_LAVA || nm == MAT_EMBER) {
           glow += 0.16 / length(vec2(float(dx), float(dy)));
+        } else if (nm == MAT_PLASMA) {
+          // Plasma throws far more light than fire.
+          glow += 0.30 / length(vec2(float(dx), float(dy)));
         }
       }
     }
@@ -343,6 +376,10 @@ function buildPaletteData(): Uint8Array {
     [14, 100, 200,  60, 255],  // Herbivore
     [15, 220,  50,  50, 255],  // Predator
     [16, 200, 200, 220, 180],  // Cloud
+    [17,  18,   6,  30, 255],  // Void — near-black with a violet cast
+    [18, 130, 245,  90, 210],  // Radiation — sickly green
+    [19, 190, 130, 255, 255],  // Plasma — violet-white
+    [20,  92,  58,  52, 255],  // Carrion — dull red-brown
   ];
   for (const [id, r, g, b, a] of defs) {
     data[id * 4]     = r;

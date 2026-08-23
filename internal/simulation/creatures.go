@@ -51,6 +51,20 @@ func getEnergy(w *world.World, i int) int16 {
 	return w.Temperature[i]
 }
 
+// starve turns a creature that has run out of energy into carrion.
+//
+// Clearing the cell instead would delete the creature's biomass from the world.
+// Carrion decays into soil nutrients, so death feeds the ground that grows the
+// plants the grazers depend on, keeping the nutrient budget closed.
+//
+// Predation is different: there the biomass transfers to the hunter, so the prey
+// cell is correctly left empty.
+func starve(w *world.World, x, y, i int) {
+	setEnergy(w, i, 0)
+	w.SetMaterial(x, y, world.MatCarrion)
+	w.Lifetime[i] = carrionInitialLifetime
+}
+
 // setEnergy writes creature energy to Temperature array.
 func setEnergy(w *world.World, i int, e int16) {
 	w.Temperature[i] = e
@@ -73,8 +87,7 @@ func simulateHerbivore(w *world.World, x, y int) {
 
 	// Death check
 	if energy <= 0 {
-		w.SetMaterial(x, y, world.MatEmpty)
-		setEnergy(w, i, 0)
+		starve(w, x, y, i)
 		return
 	}
 
@@ -124,8 +137,7 @@ func simulatePredator(w *world.World, x, y int) {
 
 	// Death check
 	if energy <= 0 {
-		w.SetMaterial(x, y, world.MatEmpty)
-		setEnergy(w, i, 0)
+		starve(w, x, y, i)
 		return
 	}
 

@@ -204,7 +204,8 @@ async function main() {
       const mat = cache[i];
       if (mat === 6 || mat === 13) fireCount++;  // Fire or Ember
       if (mat === 4) waterCount++;               // Water
-      if (mat === 6 || mat === 13 || mat === 9) emissive++; // + Lava
+      // Fire, Ember, Lava, Plasma all cast light.
+      if (mat === 6 || mat === 13 || mat === 9 || mat === 19) emissive++;
     }
 
     audio.updateAmbient(fireCount / total, waterCount / total);

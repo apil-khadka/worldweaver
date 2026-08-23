@@ -39,6 +39,14 @@ func simulateCell(w *world.World, x, y int) {
 		simulatePredator(w, x, y)
 	case world.MatCloud:
 		simulateCloud(w, x, y)
+	case world.MatVoid:
+		simulateVoid(w, x, y)
+	case world.MatRadiation:
+		simulateRadiation(w, x, y)
+	case world.MatPlasma:
+		simulatePlasma(w, x, y)
+	case world.MatCarrion:
+		simulateCarrion(w, x, y)
 	}
 }
 

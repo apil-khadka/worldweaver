@@ -273,6 +273,12 @@
       font-weight: 600;
       box-shadow: 0 0 0 2px var(--accent-glow);
     }
+    .palette-label--danger { color: var(--danger); }
+    .mat-swatch--hazard:hover { border-color: var(--danger); color: var(--danger); }
+    .mat-swatch--hazard.active {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 2px rgba(196, 69, 54, 0.22);
+    }
 
     #influence-track {
       width: 160px;
@@ -1174,6 +1180,12 @@
     <button class="mat-swatch" data-material="12" style="--sw:#503C14" title="Oil">Oil</button>
     <button class="mat-swatch" data-material="11" style="--sw:#322D28" title="Ash">Ash</button>
     <button class="mat-swatch" data-material="16" style="--sw:#C8C8DC" title="Cloud">Cloud</button>
+
+    <span class="tool-divider"></span>
+    <span class="palette-label palette-label--danger">Hazard</span>
+    <button class="mat-swatch mat-swatch--hazard" data-material="19" style="--sw:#BE82FF" title="Plasma — melts rock, boils water">Plasma</button>
+    <button class="mat-swatch mat-swatch--hazard" data-material="18" style="--sw:#82F55A" title="Radiation — kills life, spreads then decays">Radiation</button>
+    <button class="mat-swatch mat-swatch--hazard" data-material="17" style="--sw:#12061E" title="Void — consumes everything but rock">Void</button>
   </div>
 
   <!-- World canvas -->

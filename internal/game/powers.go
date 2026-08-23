@@ -95,6 +95,13 @@ func (r *PowerRequest) validateEdit(p *Player) error {
 	}
 
 	cost := ToolCostPerCell[r.Tool] * float32(CellsInRadius(r.Radius))
+
+	// Destructive materials cost more, so unleashing a void or a plasma burst is
+	// a deliberate act rather than something to hold the mouse down on.
+	if r.Tool == ToolPlace && IsHazardMaterial(r.Material) {
+		cost *= HazardCostMultiplier
+	}
+
 	if !p.ConsumeInfluence(cost) {
 		return errors.New("insufficient influence")
 	}

@@ -19,6 +19,21 @@ const (
 	MatHerbivore          // 14
 	MatPredator           // 15
 	MatCloud              // 16
+
+	// MatVoid consumes whatever it touches and decays as it feeds, so a void
+	// eats a bounded hole rather than the whole world.
+	MatVoid // 17
+
+	// MatRadiation spreads through open space, kills life and mutates plants.
+	MatRadiation // 18
+
+	// MatPlasma is far hotter than fire: it ignites anything flammable, melts
+	// rock into lava and boils water on contact.
+	MatPlasma // 19
+
+	// MatCarrion is a dead creature. It decays into soil nutrients, closing the
+	// loop rather than deleting biomass.
+	MatCarrion // 20
 )
 
 // MaterialName returns a human-readable name for debug/serialization.
@@ -58,6 +73,14 @@ func MaterialName(m uint8) string {
 		return "predator"
 	case MatCloud:
 		return "cloud"
+	case MatVoid:
+		return "void"
+	case MatRadiation:
+		return "radiation"
+	case MatPlasma:
+		return "plasma"
+	case MatCarrion:
+		return "carrion"
 	default:
 		return "unknown"
 	}
@@ -66,7 +89,7 @@ func MaterialName(m uint8) string {
 // IsSolid returns true for materials that block downward movement.
 func IsSolid(m uint8) bool {
 	switch m {
-	case MatRock, MatSoil, MatSand, MatPlant, MatIce, MatHerbivore, MatPredator:
+	case MatRock, MatSoil, MatSand, MatPlant, MatIce, MatHerbivore, MatPredator, MatCarrion:
 		return true
 	}
 	return false
@@ -89,7 +112,27 @@ func IsGas(m uint8) bool {
 
 // IsTransient returns true for materials with a finite lifetime.
 func IsTransient(m uint8) bool {
-	return m == MatFire || m == MatVapor || m == MatSmoke || m == MatEmber
+	switch m {
+	case MatFire, MatVapor, MatSmoke, MatEmber,
+		MatVoid, MatRadiation, MatPlasma, MatCarrion:
+		return true
+	}
+	return false
+}
+
+// IsEmissive returns true for materials that give off light, which the renderer
+// uses to decide whether the light-bleed pass is worth running.
+func IsEmissive(m uint8) bool {
+	return m == MatFire || m == MatLava || m == MatEmber || m == MatPlasma
+}
+
+// IsHazard returns true for materials that are lethal to creatures on contact.
+func IsHazard(m uint8) bool {
+	switch m {
+	case MatLava, MatFire, MatPlasma, MatRadiation, MatVoid:
+		return true
+	}
+	return false
 }
 
 // IsCreature returns true for living creature materials.
