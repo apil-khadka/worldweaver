@@ -159,7 +159,28 @@ func (e *Engine) tick() {
 	// Update sleep states at end of tick.
 	w.UpdateSleepStates()
 
+	// Publish cheap observability counters every tick.
+	e.metrics.ActiveChunks.Store(int64(w.ActiveChunkCount()))
+
+	// Counting non-empty cells is O(width*height), so sample it at ~2 Hz
+	// instead of every tick to keep the simulation loop cheap.
+	if w.Tick%30 == 0 {
+		e.metrics.ActiveCells.Store(int64(countNonEmptyCells(w)))
+	}
+
 	w.Tick++
 	elapsed := time.Since(start)
 	e.metrics.RecordTick(elapsed)
+}
+
+// countNonEmptyCells reports how many cells currently hold material.
+// Used for the live metrics HUD and the /api/metrics endpoint.
+func countNonEmptyCells(w *world.World) int {
+	n := 0
+	for _, m := range w.Material {
+		if m != world.MatEmpty {
+			n++
+		}
+	}
+	return n
 }
