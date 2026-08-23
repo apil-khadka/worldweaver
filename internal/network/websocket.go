@@ -92,6 +92,12 @@ func NewRouter(hub *Hub, w *world.World, m *metrics.Metrics, staticFS http.FileS
 	r.Get("/api/session", hub.handleSession)
 
 	// ── Worlds ───────────────────────────────────────────────────────────────
+	// Presets are served rather than duplicated in the client, so the lobby and
+	// the server cannot disagree about what sizes exist.
+	r.Get("/api/world-sizes", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(game.WorldPresets)
+	})
 	r.Get("/api/worlds", hub.handleListWorlds)
 	r.Post("/api/worlds", hub.handleCreateWorld)
 	r.Delete("/api/worlds/{id}", hub.handleDeleteWorld)
@@ -221,6 +227,7 @@ func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		Name       string `json:"name"`
 		Seed       int64  `json:"seed"`
 		MaxPlayers int    `json:"maxPlayers"`
+		Size       string `json:"size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
@@ -234,7 +241,7 @@ func (h *Hub) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		req.MaxPlayers = game.MaxPlayers
 	}
 
-	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.MaxPlayers, creatorName)
+	info, err := h.worldMgr.CreateWorld(req.Name, req.Seed, req.MaxPlayers, creatorName, req.Size)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return

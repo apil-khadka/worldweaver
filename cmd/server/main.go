@@ -23,6 +23,7 @@
 // Flags:
 //
 //	-addr       HTTP listen address (default :8080)
+//	-size       World size preset: small, medium, large, huge
 //	-width      World width  in cells (default 2048)
 //	-height     World height in cells (default 768)
 //	-seed       World generation seed (default 20260823)
@@ -48,14 +49,23 @@ import (
 
 func main() {
 	addr    := flag.String("addr", ":8080", "HTTP/WebSocket listen address")
+	sizeName := flag.String("size", "", "World size preset: small, medium, large, huge (overrides -width/-height)")
 	worldW  := flag.Int("width", 2048, "World width in cells")
 	worldH  := flag.Int("height", 768, "World height in cells")
 	seed    := flag.Int64("seed", 20260823, "World generation seed")
 	snapDir := flag.String("snapdir", ".", "Directory for world snapshots")
 	flag.Parse()
 
-	log.Printf("WorldWeaver — world %dx%d seed=%d addr=%s",
-		*worldW, *worldH, *seed, *addr)
+	// A named preset is the friendlier way to pick a size; explicit dimensions
+	// remain available for benchmarking odd shapes.
+	if *sizeName != "" {
+		p := game.LookupPreset(*sizeName)
+		*worldW, *worldH = p.Width, p.Height
+		log.Printf("World size preset %q → %dx%d (%s)", p.Name, p.Width, p.Height, p.Description)
+	}
+
+	log.Printf("WorldWeaver — world %dx%d (%.1fM cells) seed=%d addr=%s",
+		*worldW, *worldH, float64(*worldW**worldH)/1e6, *seed, *addr)
 
 	// ── World ────────────────────────────────────────────────────────────────
 	w := world.New(*worldW, *worldH, *seed)

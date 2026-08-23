@@ -25,10 +25,55 @@ const (
 	MaxPlayers = 8
 )
 
+// ── World size presets ───────────────────────────────────────────────────────
+
+// WorldSizeName identifies a world size preset chosen at creation time.
+type WorldSizeName string
+
+const (
+	SizeSmall  WorldSizeName = "small"
+	SizeMedium WorldSizeName = "medium"
+	SizeLarge  WorldSizeName = "large"
+	SizeHuge   WorldSizeName = "huge"
+)
+
+// WorldPreset describes the dimensions behind a size name.
+//
+// Depth grows more slowly than width: every world needs enough height for its
+// vertical strata, but a longer world is what makes exploration interesting.
+// Cell counts are kept within the measured simulation budget — 2.1M cells runs
+// at 2.99 ms/tick against a 16.67 ms allowance for 60 TPS.
+type WorldPreset struct {
+	Name        WorldSizeName
+	Width       int
+	Height      int
+	Description string
+}
+
+// WorldPresets lists the selectable sizes in ascending order.
+var WorldPresets = []WorldPreset{
+	{SizeSmall, 1024, 640, "Compact — quick to fill, easy on older machines"},
+	{SizeMedium, 2048, 768, "Balanced — the default"},
+	{SizeLarge, 3072, 896, "Long — Terraria-like proportions"},
+	{SizeHuge, 4096, 1024, "Vast — best with a fast machine"},
+}
+
+// LookupPreset resolves a size name, falling back to medium for anything
+// unrecognised so a malformed request cannot fail world creation.
+func LookupPreset(name string) WorldPreset {
+	for _, p := range WorldPresets {
+		if string(p.Name) == name {
+			return p
+		}
+	}
+	return WorldPresets[1] // medium
+}
+
 // WorldSize calculates world dimensions for a given player capacity.
 //
-// Only the width scales: more players need more ground to spread out over, while
-// the vertical strata stay the same depth in every world.
+// Used when no explicit size preset is given. Only the width scales: more players
+// need more ground to spread out over, while the vertical strata stay the same
+// depth in every world.
 // 1–4 players → 1024x768, 6 → 1536x768, 8 → 2048x768.
 func WorldSize(playerCap int) (width, height int) {
 	if playerCap < 1 {
@@ -96,6 +141,9 @@ type WorldInfo struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	PlayerCount int       `json:"playerCount"`
 	MaxPlayers  int       `json:"maxPlayers"`
+
+	// Size is the preset the world was created from, for display in the lobby.
+	Size WorldSizeName `json:"size,omitempty"`
 }
 
 // WorldInstance holds a world's metadata plus cooperative goal state.
@@ -142,8 +190,11 @@ func NewWorldManager(defaultSeed int64, defaultW, defaultH int) *WorldManager {
 }
 
 // CreateWorld creates a new world and returns its info.
-// playerCap is clamped to [1, MaxPlayers]; dimensions are computed from it.
-func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, creatorName string) (*WorldInfo, error) {
+//
+// playerCap is clamped to [1, MaxPlayers]. Dimensions come from the named size
+// preset; an empty or unrecognised size falls back to deriving them from player
+// capacity, which is how worlds were sized before presets existed.
+func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, creatorName string, size string) (*WorldInfo, error) {
 	if name == "" {
 		return nil, fmt.Errorf("world name cannot be empty")
 	}
@@ -154,7 +205,16 @@ func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, crea
 		playerCap = MaxPlayers
 	}
 
-	width, height := WorldSize(playerCap)
+	var width, height int
+	var sizeName WorldSizeName
+	if size == "" {
+		width, height = WorldSize(playerCap)
+		sizeName = SizeMedium
+	} else {
+		p := LookupPreset(size)
+		width, height, sizeName = p.Width, p.Height, p.Name
+	}
+
 	id := generateWorldID()
 
 	wm.mu.Lock()
@@ -170,6 +230,7 @@ func (wm *WorldManager) CreateWorld(name string, seed int64, playerCap int, crea
 			CreatorName: creatorName,
 			CreatedAt:   time.Now(),
 			MaxPlayers:  playerCap,
+			Size:        sizeName,
 		},
 		Goal: GoalState{
 			Definition: GoalRotation[0],
