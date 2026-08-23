@@ -17,10 +17,8 @@
 
 import { Lobby } from "./lobby.js";
 import { WorldNetwork, type IGameRenderer } from "./network.js";
-import { WorldRenderer, type FullSnapshot } from "./renderer.js";
+import { WorldRenderer } from "./renderer.js";
 import { WebGL2WorldRenderer, isWebGL2Available } from "./webgl2-renderer.js";
-import { IsometricRenderer } from "./isometric-renderer.js";
-import { PixiWorldRenderer, isPixiAvailable } from "./pixi-renderer.js";
 import { InputHandler } from "./input.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
@@ -48,16 +46,9 @@ async function main() {
   const wrapper = document.getElementById("canvas-wrapper") as HTMLDivElement;
   const overlayCanvas = document.getElementById("power-overlay") as HTMLCanvasElement;
 
-  // ── Create initial renderer (PixiJS 8 — GPU accelerated) ─────────────────
-  let renderer: IGameRenderer;
-
-  const pixi = new PixiWorldRenderer(canvas);
-  await pixi.init();
-  renderer = pixi;
-  console.info("[main] using PixiJS 8 renderer (GPU-accelerated)");
-
-  // Track which renderer is active (can be swapped by the view toggle)
-  let activeRenderer: IGameRenderer = renderer;
+  // ── Create renderer ───────────────────────────────────────────────────────
+  const renderer = createRenderer(canvas);
+  const activeRenderer: IGameRenderer = renderer;
 
   // ── Wire up subsystems ─────────────────────────────────────────────────
   const wsUrl = buildWsUrl(selection.token, selection.worldID);
@@ -171,57 +162,6 @@ async function main() {
     lastScore = s.influence;
   };
 
-  // ── View mode toggle (2D ↔ 2.5D) ──────────────────────────────────────
-  // The PixiJS renderer is the flat 2D path and cannot be swapped synchronously
-  // (it requires async init), so the 2D↔2.5D toggle is only wired for the
-  // legacy WebGL2/Isometric renderers used as fallbacks.
-  let viewMode: "2.5D" | "2D" = renderer instanceof IsometricRenderer ? "2.5D" : "2D";
-
-  const viewToggle = document.getElementById("view-toggle") as HTMLButtonElement | null;
-  if (viewToggle) {
-    viewToggle.style.display = "none"; // PixiJS handles rendering
-    // PixiJS active: hide the legacy view toggle
-    viewToggle.style.display = "none";
-  } else if (viewToggle) {
-    viewToggle.textContent = viewMode === "2.5D" ? "◆ 2.5D" : "▦ 2D";
-    viewToggle.addEventListener("click", () => {
-      if (viewMode === "2.5D") {
-        // Switch to flat 2D
-        viewMode = "2D";
-        viewToggle.textContent = "▦ 2D";
-        const flatRenderer = (() => {
-          try { return new WebGL2WorldRenderer(canvas); }
-          catch { return new WorldRenderer(canvas); }
-        })();
-        transferState(activeRenderer, flatRenderer);
-        if ("dispose" in activeRenderer) (activeRenderer as any).dispose();
-        activeRenderer = flatRenderer;
-        network.swapRenderer(flatRenderer);
-        input.swapRenderer(flatRenderer);
-        minimap.swapRenderer(flatRenderer);
-        resizeCanvas();
-      } else {
-        // Switch to isometric 2.5D
-        viewMode = "2.5D";
-        viewToggle.textContent = "◆ 2.5D";
-        try {
-          const isoRenderer = new IsometricRenderer(canvas);
-          transferState(activeRenderer, isoRenderer);
-          if ("dispose" in activeRenderer) (activeRenderer as any).dispose();
-          activeRenderer = isoRenderer;
-          network.swapRenderer(isoRenderer);
-          input.swapRenderer(isoRenderer);
-          minimap.swapRenderer(isoRenderer);
-          resizeCanvas();
-        } catch (e) {
-          console.warn("[main] Cannot switch to isometric:", e);
-          viewMode = "2D";
-          viewToggle.textContent = "▦ 2D";
-        }
-      }
-    });
-  }
-
   // Show player nickname in header
   const nicknameEl = document.getElementById("hdr-nickname");
   if (nicknameEl) {
@@ -241,10 +181,6 @@ async function main() {
     if (e.key in powerMap) {
       effects.setActivePower(powerMap[e.key]);
     }
-    // V key toggles view mode
-    if (e.key === "v" || e.key === "V") {
-      viewToggle?.click();
-    }
   });
 
   // Sync renderer viewport to canvas data attributes for cursor positioning
@@ -260,6 +196,7 @@ async function main() {
 
     let fireCount = 0;
     let waterCount = 0;
+    let emissive = 0;
     // Sample every 16th cell for performance
     const step = 16;
     const total = cache.length / step;
@@ -267,49 +204,39 @@ async function main() {
       const mat = cache[i];
       if (mat === 6 || mat === 13) fireCount++;  // Fire or Ember
       if (mat === 4) waterCount++;               // Water
+      if (mat === 6 || mat === 13 || mat === 9) emissive++; // + Lava
     }
 
     audio.updateAmbient(fireCount / total, waterCount / total);
+
+    // Let the renderer skip its light-bleed pass when nothing is burning. That
+    // pass samples the material texture eight times per fragment, so switching
+    // it off is a large saving on a world with no fire in view.
+    if ("setHasEmissive" in activeRenderer) {
+      (activeRenderer as { setHasEmissive(v: boolean): void })
+        .setHasEmissive(emissive > 0);
+    }
   }, 250);
 }
 
-/** Create a non-PixiJS fallback renderer (WebGL2 → Canvas2D cascade). */
-function createFallbackRenderer(canvas: HTMLCanvasElement): IGameRenderer {
+/**
+ * Builds the world renderer.
+ *
+ * WebGL2 is the only real target; Canvas2D exists purely so the game still
+ * displays on hardware without it.
+ */
+function createRenderer(canvas: HTMLCanvasElement): IGameRenderer {
   if (isWebGL2Available()) {
     try {
-      const iso = new IsometricRenderer(canvas);
-      console.info("[main] using Isometric 2.5D renderer (WebGL2 fallback)");
-      return iso;
+      const gl2 = new WebGL2WorldRenderer(canvas);
+      console.info("[main] using WebGL2 renderer");
+      return gl2;
     } catch (e) {
-      console.warn("[main] Isometric failed, trying flat WebGL2:", e);
-      try {
-        const gl2 = new WebGL2WorldRenderer(canvas);
-        console.info("[main] using WebGL2 renderer (fallback)");
-        return gl2;
-      } catch (e2) {
-        console.warn("[main] WebGL2 init failed, falling back to Canvas2D:", e2);
-      }
+      console.warn("[main] WebGL2 init failed, falling back to Canvas2D:", e);
     }
   }
-  console.info("[main] using Canvas2D renderer (final fallback)");
+  console.info("[main] using Canvas2D renderer (fallback)");
   return new WorldRenderer(canvas);
-}
-
-/** Transfer world state and camera from one renderer to another. */
-function transferState(from: IGameRenderer, to: IGameRenderer): void {
-  to.initWorld(from.worldW, from.worldH);
-  const cache = from.getMaterialCache();
-  if (cache && from.worldW > 0) {
-    to.applySnapshot({
-      tick: 0,
-      x: 0, y: 0,
-      w: from.worldW,
-      h: from.worldH,
-      data: new Uint8Array(cache),
-    });
-  }
-  to.viewX = from.viewX;
-  to.viewY = from.viewY;
 }
 
 function buildWsUrl(token: string, worldID: string): string {
