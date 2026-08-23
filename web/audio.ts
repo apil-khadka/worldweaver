@@ -15,6 +15,7 @@ export class AudioEngine {
 
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private volume = 1.0;
   private muted = false;
   private initialized = false;
 
@@ -42,7 +43,9 @@ export class AudioEngine {
     try {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 1.0;
+      // Honour a volume chosen before the context existed. Audio can only be
+      // created after a user gesture, so settings are often restored first.
+      this.masterGain.gain.value = this.muted ? 0 : this.volume;
       this.masterGain.connect(this.ctx.destination);
       console.info("[audio] initialized");
     } catch (e) {
@@ -63,14 +66,29 @@ export class AudioEngine {
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(
-        this.muted ? 0 : 1.0,
-        this.ctx!.currentTime,
-        0.05
-      );
-    }
+    this.applyGain();
     return this.muted;
+  }
+
+  /** Sets master volume in the range 0..1. Unmutes if raised above zero. */
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.volume > 0) this.muted = false;
+    this.applyGain();
+  }
+
+  get currentVolume(): number {
+    return this.volume;
+  }
+
+  /** Ramps the master gain rather than stepping it, to avoid audible clicks. */
+  private applyGain(): void {
+    if (!this.masterGain || !this.ctx) return;
+    this.masterGain.gain.setTargetAtTime(
+      this.muted ? 0 : this.volume,
+      this.ctx.currentTime,
+      0.05,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -175,6 +175,160 @@
       font-weight: 500;
     }
 
+    /* ── Settings panel ─────────────────────────────────── */
+    #settings-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    #settings-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #FFF8EB;
+    }
+
+    #settings-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10002;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(44, 24, 16, 0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #settings-overlay.visible { display: flex; }
+
+    .settings-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 12px 40px rgba(44, 24, 16, 0.18);
+      min-width: 340px;
+      max-width: 420px;
+    }
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--sp-4);
+    }
+    .settings-head h3 { font-size: 14px; font-weight: 700; }
+    .settings-close {
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      line-height: 1;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    .settings-close:hover { color: var(--danger); }
+
+    .settings-session {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      font-size: 12px;
+      color: var(--muted);
+      padding-bottom: var(--sp-3);
+      margin-bottom: var(--sp-4);
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-session b { color: var(--text); }
+    .settings-world {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    .settings-group {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: var(--sp-2) var(--sp-3);
+      margin-bottom: var(--sp-4);
+    }
+    .settings-group label {
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .settings-group input[type="range"] {
+      grid-column: 1 / 2;
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .settings-group output {
+      font-size: 11px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      min-width: 34px;
+      text-align: right;
+    }
+    .settings-group select {
+      grid-column: 1 / -1;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .settings-toggles {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-5);
+    }
+    .settings-toggles label {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .settings-toggles input { accent-color: var(--accent); cursor: pointer; }
+
+    .settings-actions {
+      display: flex;
+      gap: var(--sp-3);
+      padding-top: var(--sp-4);
+      border-top: 1px solid var(--border);
+    }
+    .settings-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .settings-btn--danger:hover { border-color: var(--danger); color: var(--danger); }
+
     /* ── God-mode tools ─────────────────────────────────── */
     .tool-divider {
       width: 1px;
@@ -1134,6 +1288,7 @@
       </div>
       <span id="connection-badge">⚪ Connecting…</span>
       <button id="shortcuts-btn" title="Keyboard shortcuts (?)">?</button>
+      <button id="settings-btn" title="Settings (Esc)">⚙</button>
     </div>
   </div>
 
@@ -1235,6 +1390,7 @@
       <div class="shortcut-row"><kbd>[ ]</kbd> <span>Brush size</span></div>
       <div class="shortcut-row"><kbd>Scroll</kbd> <span>Zoom</span></div>
       <div class="shortcut-row"><kbd>M</kbd> <span>Toggle minimap</span></div>
+      <div class="shortcut-row"><kbd>Esc</kbd> <span>Settings</span></div>
       <div class="shortcut-row"><kbd>?</kbd> <span>This help</span></div>
     </div>
   </div>

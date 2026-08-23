@@ -20,6 +20,7 @@ import { WorldNetwork, type IGameRenderer } from "./network.js";
 import { WorldRenderer } from "./renderer.js";
 import { WebGL2WorldRenderer, isWebGL2Available } from "./webgl2-renderer.js";
 import { InputHandler } from "./input.js";
+import { SettingsPanel } from "./settings.js";
 import { UIController } from "./ui.js";
 import { PowerEffects } from "./effects.js";
 import { Minimap } from "./minimap.js";
@@ -59,13 +60,26 @@ async function main() {
   const minimapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
   const minimap  = new Minimap(minimapCanvas, renderer, canvas);
 
+  // Render scale trades sharpness for frame rate: the canvas backing store is
+  // smaller than its displayed size, so the shader runs over fewer fragments
+  // while CSS stretches the result back out.
+  let renderScale = 1;
+
   function resizeCanvas(): void {
-    canvas.width  = wrapper.clientWidth;
-    canvas.height = wrapper.clientHeight;
-    overlayCanvas.width  = wrapper.clientWidth;
-    overlayCanvas.height = wrapper.clientHeight;
+    const cssW = wrapper.clientWidth;
+    const cssH = wrapper.clientHeight;
+
+    canvas.width  = Math.max(1, Math.round(cssW * renderScale));
+    canvas.height = Math.max(1, Math.round(cssH * renderScale));
+    canvas.style.width  = "100%";
+    canvas.style.height = "100%";
+
+    // Overlays draw UI, not world content, so they stay at full resolution.
+    overlayCanvas.width  = cssW;
+    overlayCanvas.height = cssH;
+
     activeRenderer.onResize();
-    effects.resize(wrapper.clientWidth, wrapper.clientHeight);
+    effects.resize(cssW, cssH);
   }
 
   resizeCanvas();
@@ -118,24 +132,8 @@ async function main() {
   document.addEventListener("click", initAudio);
   document.addEventListener("keydown", initAudio);
 
-  // Mute toggle button
-  const muteBtn = document.createElement("button");
-  muteBtn.id = "audio-mute";
-  muteBtn.className = "hdr-btn";
-  muteBtn.textContent = "🔊";
-  muteBtn.title = "Toggle sound effects";
-  muteBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const muted = audio.toggleMute();
-    muteBtn.textContent = muted ? "🔇" : "🔊";
-  });
-  // Insert into header controls
-  const headerRight = document.querySelector(".header-right, .hdr-controls");
-  if (headerRight) {
-    headerRight.prepend(muteBtn);
-  } else {
-    document.querySelector("header")?.appendChild(muteBtn);
-  }
+  // Volume lives in the settings panel rather than a separate header toggle, so
+  // there is one place that owns it and the two cannot disagree.
 
   // Wire player join/leave sounds into network callbacks
   const origCallbacks = network.callbacks;
@@ -161,6 +159,18 @@ async function main() {
     }
     lastScore = s.influence;
   };
+
+  // ── Settings, session menu and logout ────────────────────────────────────
+  const settings = new SettingsPanel(selection.nickname, selection.worldID);
+  settings.onRenderScaleChange = (scale) => {
+    renderScale = scale;
+    resizeCanvas();
+  };
+  settings.attach();
+  settings.applyAll();
+
+  document.getElementById("settings-btn")
+    ?.addEventListener("click", () => settings.toggle());
 
   // Show player nickname in header
   const nicknameEl = document.getElementById("hdr-nickname");
