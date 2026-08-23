@@ -23,8 +23,8 @@
 // Flags:
 //
 //	-addr       HTTP listen address (default :8080)
-//	-width      World width  in cells (default 1024)
-//	-height     World height in cells (default 512)
+//	-width      World width  in cells (default 2048)
+//	-height     World height in cells (default 768)
 //	-seed       World generation seed (default 20260823)
 //	-snapdir    Directory for world snapshots (default .)
 package main
@@ -48,8 +48,8 @@ import (
 
 func main() {
 	addr    := flag.String("addr", ":8080", "HTTP/WebSocket listen address")
-	worldW  := flag.Int("width", 1024, "World width in cells")
-	worldH  := flag.Int("height", 512, "World height in cells")
+	worldW  := flag.Int("width", 2048, "World width in cells")
+	worldH  := flag.Int("height", 768, "World height in cells")
 	seed    := flag.Int64("seed", 20260823, "World generation seed")
 	snapDir := flag.String("snapdir", ".", "Directory for world snapshots")
 	flag.Parse()
@@ -79,8 +79,8 @@ func main() {
 	worldMgr := game.NewWorldManager(*seed, *worldW, *worldH)
 	hub := network.NewHub(w, eng, m, sb, "genesis", auth, worldMgr)
 
-	// Static file system — serves web/ directory
-	staticFS := http.Dir("web")
+	// Static file system — serves the built frontend from web/dist/
+	staticFS := http.Dir("web/dist")
 	router := network.NewRouter(hub, w, m, staticFS)
 
 	srv := &http.Server{

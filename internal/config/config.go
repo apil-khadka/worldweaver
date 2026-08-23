@@ -49,8 +49,12 @@ type ServerConfig struct {
 func Default() ServerConfig {
 	return ServerConfig{
 		Addr:             ":8080",
-		WorldWidth:       1024,
-		WorldHeight:      512,
+		// A wide, shallow world in the Terraria mould: traversed mostly sideways,
+		// with room for vertical strata. Measured at 2.99 ms/tick for 2.1M cells
+		// on an M5 Pro, so 1.57M cells leaves ample headroom against the 16.67 ms
+		// budget for 60 TPS. See docs/performance/benchmark-results.md.
+		WorldWidth:       2048,
+		WorldHeight:      768,
 		WorldSeed:        20260823,
 		ChunkSize:        64,
 		TickRate:         60,

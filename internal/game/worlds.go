@@ -11,13 +11,25 @@ import (
 // ── Dynamic World Scaling ────────────────────────────────────────────────────
 
 const (
-	BaseWidth  = 256
-	BaseHeight = 128
+	// BaseWidth is the horizontal room allotted per player slot.
+	BaseWidth = 256
+
+	// MinWidth keeps even a two-player world wider than it is tall.
+	MinWidth = 1024
+
+	// WorldDepth is fixed for every world regardless of capacity. Depth is a
+	// property of the world's vertical strata — sky, surface, underground,
+	// cavern, underworld — so it must not shrink with player count. Scaling it
+	// down left small worlds too shallow to hold distinct layers.
+	WorldDepth = 768
 	MaxPlayers = 8
 )
 
-// WorldSize calculates dimensions scaled by player capacity.
-// 2 players → 512x256, 4 → 1024x512, 8 → 2048x1024.
+// WorldSize calculates world dimensions for a given player capacity.
+//
+// Only the width scales: more players need more ground to spread out over, while
+// the vertical strata stay the same depth in every world.
+// 1–4 players → 1024x768, 6 → 1536x768, 8 → 2048x768.
 func WorldSize(playerCap int) (width, height int) {
 	if playerCap < 1 {
 		playerCap = 1
@@ -25,7 +37,11 @@ func WorldSize(playerCap int) (width, height int) {
 	if playerCap > MaxPlayers {
 		playerCap = MaxPlayers
 	}
-	return BaseWidth * playerCap, BaseHeight * playerCap
+	width = BaseWidth * playerCap
+	if width < MinWidth {
+		width = MinWidth
+	}
+	return width, WorldDepth
 }
 
 // ── Cooperative Goals ────────────────────────────────────────────────────────
