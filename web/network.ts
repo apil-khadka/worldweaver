@@ -35,6 +35,9 @@ export interface IGameRenderer {
 
 const RECONNECT_DELAY_MS = 2000;
 
+/** Direct world-editing tools, mirroring the server's tool names. */
+export type GodTool = "place" | "erase" | "raise" | "lower";
+
 export interface MetricsData {
   tps:          number;
   tickP95Ms:    number;
@@ -149,6 +152,11 @@ export class WorldNetwork {
         this.worldW   = msg["worldW"]   as number;
         this.worldH   = msg["worldH"]   as number;
         this.renderer.initWorld(this.worldW, this.worldH);
+        // Send initial viewport so server streams the right area
+        this.sendViewport(
+          this.renderer.viewX, this.renderer.viewY,
+          this.renderer.visibleW, this.renderer.visibleH,
+        );
         break;
 
       case "world_snapshot": {
@@ -285,11 +293,33 @@ export class WorldNetwork {
   sendPower(power: number, x: number, y: number, radius = 24): void {
     this.send({
       type:      "power",
+      tool:      "force",
       power,
       x:         Math.round(x),
       y:         Math.round(y),
       radius,
       intensity: 0.8,
+    });
+  }
+
+  /**
+   * Send a direct world edit.
+   *
+   * Shares the power message so the server applies the same validation, rate
+   * limiting and influence accounting as the elemental forces.
+   *
+   * @param tool     "place", "erase", "raise" or "lower"
+   * @param material Material ID, only meaningful for "place"
+   */
+  sendEdit(tool: GodTool, material: number, x: number, y: number, radius: number): void {
+    this.send({
+      type:      "power",
+      tool,
+      material,
+      x:         Math.round(x),
+      y:         Math.round(y),
+      radius,
+      intensity: 1.0,
     });
   }
 

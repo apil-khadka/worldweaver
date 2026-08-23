@@ -175,18 +175,105 @@
       font-weight: 500;
     }
 
-    /* View mode toggle */
-    #view-toggle {
-      margin-left: var(--sp-4);
-      border-color: var(--border-highlight);
-      font-weight: 600;
-      letter-spacing: 0.02em;
+    /* ── God-mode tools ─────────────────────────────────── */
+    .tool-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 var(--sp-2);
     }
-    #view-toggle:hover {
+    .tool-btn {
+      padding: var(--sp-2) var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .tool-btn:hover {
       border-color: var(--accent);
-      background: #FFF8EB;
       color: var(--accent);
+      background: #FFF8EB;
     }
+    .tool-btn.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    #brush-control {
+      display: none;
+      align-items: center;
+      gap: var(--sp-2);
+      margin-left: var(--sp-3);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    #brush-control.visible { display: flex; }
+    #brush-slider { width: 90px; accent-color: var(--accent); }
+    #brush-value {
+      min-width: 18px;
+      text-align: right;
+      font-weight: 600;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Material palette — revealed by the Place tool */
+    #material-palette {
+      display: none;
+      align-items: center;
+      gap: var(--sp-2);
+      padding: var(--sp-2) var(--sp-5);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+    #material-palette.visible { display: flex; }
+    .palette-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: var(--sp-2);
+    }
+    .mat-swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      padding: var(--sp-1) var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .mat-swatch::before {
+      content: '';
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      background: var(--sw);
+      border: 1px solid rgba(44, 24, 16, 0.18);
+    }
+    .mat-swatch:hover { border-color: var(--accent); color: var(--text); }
+    .mat-swatch.active {
+      border-color: var(--accent);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
     #influence-track {
       width: 160px;
       height: 5px;
@@ -1052,7 +1139,18 @@
     <button class="power-btn"        data-power="3" title="Growth (4/s)">🌱 Growth</button>
     <button class="power-btn power-locked" data-power="4" data-unlock-level="4" title="Life (5/s) — Lv. 4 required">🐾 Life</button>
 
-    <button id="view-toggle" class="power-btn" title="Toggle 2D / 2.5D isometric view (V)">◆ 2.5D</button>
+    <span class="tool-divider"></span>
+
+    <button class="tool-btn" data-tool="place" title="Place material (P)">✏️ Place</button>
+    <button class="tool-btn" data-tool="erase" title="Erase to empty (E)">🧽 Erase</button>
+    <button class="tool-btn" data-tool="raise" title="Raise ground (R)">⛰ Raise</button>
+    <button class="tool-btn" data-tool="lower" title="Lower ground (F)">🕳 Lower</button>
+
+    <div id="brush-control" title="Brush size ( [ and ] )">
+      <span>Brush</span>
+      <input type="range" id="brush-slider" min="1" max="32" value="8" />
+      <span id="brush-value">8</span>
+    </div>
 
     <div id="influence-bar">
       <span>Influence</span>
@@ -1060,6 +1158,22 @@
       <span id="influence-value">100</span>
       <span id="influence-low-text">Low influence — regenerating…</span>
     </div>
+  </div>
+
+  <!-- Material palette — only shown while the Place tool is active -->
+  <div id="material-palette">
+    <span class="palette-label">Material</span>
+    <button class="mat-swatch active" data-material="4"  style="--sw:#1E64C8" title="Water">Water</button>
+    <button class="mat-swatch" data-material="1"  style="--sw:#504B46" title="Rock">Rock</button>
+    <button class="mat-swatch" data-material="2"  style="--sw:#654321" title="Soil">Soil</button>
+    <button class="mat-swatch" data-material="3"  style="--sw:#D2B464" title="Sand">Sand</button>
+    <button class="mat-swatch" data-material="5"  style="--sw:#328C32" title="Plant">Plant</button>
+    <button class="mat-swatch" data-material="6"  style="--sw:#F06414" title="Fire">Fire</button>
+    <button class="mat-swatch" data-material="9"  style="--sw:#FF5000" title="Lava">Lava</button>
+    <button class="mat-swatch" data-material="10" style="--sw:#B4E6FF" title="Ice">Ice</button>
+    <button class="mat-swatch" data-material="12" style="--sw:#503C14" title="Oil">Oil</button>
+    <button class="mat-swatch" data-material="11" style="--sw:#322D28" title="Ash">Ash</button>
+    <button class="mat-swatch" data-material="16" style="--sw:#C8C8DC" title="Cloud">Cloud</button>
   </div>
 
   <!-- World canvas -->
@@ -1101,10 +1215,14 @@
     <div class="shortcuts-card">
       <h3>Keyboard Shortcuts</h3>
       <div class="shortcut-row"><kbd>WASD</kbd> <span>Pan camera</span></div>
-      <div class="shortcut-row"><kbd>1–5</kbd> <span>Select power</span></div>
+      <div class="shortcut-row"><kbd>1–5</kbd> <span>Select force</span></div>
+      <div class="shortcut-row"><kbd>P</kbd> <span>Place material</span></div>
+      <div class="shortcut-row"><kbd>E</kbd> <span>Erase</span></div>
+      <div class="shortcut-row"><kbd>R</kbd> <span>Raise ground</span></div>
+      <div class="shortcut-row"><kbd>F</kbd> <span>Lower ground</span></div>
+      <div class="shortcut-row"><kbd>[ ]</kbd> <span>Brush size</span></div>
       <div class="shortcut-row"><kbd>Scroll</kbd> <span>Zoom</span></div>
       <div class="shortcut-row"><kbd>M</kbd> <span>Toggle minimap</span></div>
-      <div class="shortcut-row"><kbd>V</kbd> <span>Toggle 2D / 2.5D view</span></div>
       <div class="shortcut-row"><kbd>?</kbd> <span>This help</span></div>
     </div>
   </div>

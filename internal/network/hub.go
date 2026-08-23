@@ -97,7 +97,9 @@ func (h *Hub) unregister(c *Client) {
 func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 	req := &game.PowerRequest{
 		PlayerID:  c.Player.ID,
+		Tool:      msg.Tool,
 		Power:     msg.Power,
+		Material:  msg.Material,
 		X:         msg.X,
 		Y:         msg.Y,
 		Radius:    msg.Radius,
@@ -111,7 +113,9 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 
 	h.engine.EnqueueAction(simulation.PlayerAction{
 		PlayerID:  req.PlayerID,
+		Tool:      req.Tool,
 		Power:     simulation.PowerType(req.Power),
+		Material:  req.Material,
 		X:         req.X,
 		Y:         req.Y,
 		Radius:    req.Radius,
@@ -121,6 +125,9 @@ func (h *Hub) handlePowerInput(c *Client, msg *PowerInputMsg) {
 	// Track scoring: estimate cells affected from radius
 	cellsAffected := estimateCellsInRadius(req.Radius)
 	cost := game.InfluenceCost[req.Power]
+	if req.Tool != game.ToolForce {
+		cost = game.ToolCostPerCell[req.Tool] * float32(cellsAffected)
+	}
 	h.Scoreboard.RecordPowerAction(h.WorldName, c.Player.ID, req.Power, cellsAffected, cost)
 
 	// Update player score/level from scoreboard

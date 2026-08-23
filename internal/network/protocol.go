@@ -69,11 +69,17 @@ type HelloMsg struct {
 	ViewH uint16 `json:"viewH"`
 }
 
-// PowerInputMsg carries a player's power application request.
+// PowerInputMsg carries a player's world-shaping request.
 // The server validates and rate-limits before acting on this.
+//
+// Tool selects between applying an elemental force and editing the world
+// directly. It is optional: an absent value means "force", which keeps the
+// message compatible with clients that predate the god-mode tools.
 type PowerInputMsg struct {
 	Type      string  `json:"type"`
+	Tool      string  `json:"tool,omitempty"`
 	Power     uint8   `json:"power"`
+	Material  uint8   `json:"material,omitempty"`
 	X         int     `json:"x"`
 	Y         int     `json:"y"`
 	Radius    int     `json:"radius"`
