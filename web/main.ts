@@ -27,6 +27,7 @@ import { Minimap } from "./minimap.js";
 import { AudioEngine } from "./audio.js";
 import { ChatSystem } from "./chat.js";
 import { SocialSystem } from "./social.js";
+import { ElementDrawer } from "./element-drawer.js";
 import {
   BrushOverlay, MAT_HERBIVORE, MAT_SHEEP, MAT_PREDATOR,
 } from "./brush-overlay.js";

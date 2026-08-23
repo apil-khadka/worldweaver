@@ -320,6 +320,11 @@ export class InputHandler {
     this.activeMaterial = material;
   }
 
+  /** Activates the place tool after a material is selected from the drawer. */
+  selectPlaceTool(): void {
+    this.selectTool("place");
+  }
+
   /** Adjusts the brush radius, clamped to the server's cap. */
   setBrushRadius(radius: number): void {
     this.brushRadius = Math.max(1, Math.min(MAX_BRUSH_RADIUS, Math.round(radius)));

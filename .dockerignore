@@ -1,0 +1,11 @@
+.git
+.github
+.githooks
+.kiro
+
+web/node_modules
+web/dist
+src-tauri/target
+
+*.snapshot*
+.DS_Store

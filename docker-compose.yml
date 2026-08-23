@@ -47,7 +47,7 @@ services:
       worldweaver-backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80/"]
       interval: 10s
       timeout: 3s
       start_period: 5s
